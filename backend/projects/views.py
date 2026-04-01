@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import viewsets
 from rest_framework.decorators import action, throttle_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.throttles import ApiKeyRotationThrottle
@@ -12,13 +13,20 @@ from findings.models import AuditLog
 
 from .membership import ProjectMembership
 from .models import Project, generate_api_key
-from .permissions import get_project_for_user
+from .permissions import get_project_for_user, HasProjectRole
 from .serializers import ProjectSerializer
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     lookup_field = "slug"
+    permission_classes = [IsAuthenticated, HasProjectRole]
+    action_roles = {
+        "update": ProjectMembership.Role.ADMIN,
+        "partial_update": ProjectMembership.Role.ADMIN,
+        "destroy": ProjectMembership.Role.OWNER,
+        "rotate_api_key": ProjectMembership.Role.OWNER,
+    }
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -38,10 +46,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         log_audit(self.request, AuditLog.Action.PROJECT_CREATE, "project", instance.id, instance)
 
     def perform_update(self, serializer):
-        get_project_for_user(
-            self.request, serializer.instance.slug,
-            min_role=ProjectMembership.Role.ADMIN,
-        )
         instance = serializer.save()
         log_audit(
             self.request, AuditLog.Action.PROJECT_UPDATE, "project",
@@ -49,8 +53,6 @@ class ProjectViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
-
-        get_project_for_user(self.request, instance.slug, min_role=ProjectMembership.Role.OWNER)
         log_audit(self.request, AuditLog.Action.PROJECT_DELETE, "project", instance.id, instance)
         instance.delete()
 
@@ -58,7 +60,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @throttle_classes([ApiKeyRotationThrottle])
     def rotate_api_key(self, request, slug=None):
         """Rotate API key with grace period for old key."""
-        project = get_project_for_user(request, slug, min_role=ProjectMembership.Role.OWNER)
+        project = self.get_object()
 
         project.old_api_key = project.api_key
         project.old_key_expires_at = timezone.now() + timedelta(hours=project.api_key_grace_period_hours)

@@ -29,10 +29,26 @@ def get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.
 
 
 class HasProjectRole(BasePermission):
-    """DRF permission for ViewSet-based views that operate on a Project."""
+    """DRF permission for ViewSet-based views that operate on a Project.
+
+    Set ``action_roles`` on the view to map action names to minimum roles::
+
+        class MyViewSet(viewsets.ModelViewSet):
+            action_roles = {
+                "update": ProjectMembership.Role.ADMIN,
+                "partial_update": ProjectMembership.Role.ADMIN,
+                "destroy": ProjectMembership.Role.OWNER,
+            }
+
+    Actions not listed default to ``min_role`` (falls back to VIEWER).
+    """
 
     def has_object_permission(self, request, view, obj):
-        min_role = getattr(view, "min_role", ProjectMembership.Role.VIEWER)
+        action_roles = getattr(view, "action_roles", {})
+        action = getattr(view, "action", None)
+        default_role = getattr(view, "min_role", ProjectMembership.Role.VIEWER)
+        min_role = action_roles.get(action, default_role)
+
         membership = ProjectMembership.objects.filter(
             project=obj, user=request.user
         ).first()

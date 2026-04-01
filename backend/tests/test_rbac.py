@@ -181,14 +181,23 @@ class TestRBACViewAccess:
         )
         assert resp.status_code == 404
 
-    def test_member_can_bulk_update(self, member_user, rbac_project, setup_members):
+    def test_member_cannot_bulk_update(self, member_user, rbac_project, setup_members):
         client = _client_for(member_user)
         resp = client.post(
             f"/api/projects/{rbac_project.slug}/findings/bulk/",
             {"finding_ids": [], "action": "status_change", "status": "open"},
             format="json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 404
+
+    def test_admin_can_bulk_update(self, admin_user, rbac_project, setup_members):
+        client = _client_for(admin_user)
+        resp = client.post(
+            f"/api/projects/{rbac_project.slug}/findings/bulk/",
+            {"finding_ids": [], "action": "status_change", "status": "open"},
+            format="json",
+        )
+        assert resp.status_code == 400  # 400 = reached validation (empty finding_ids)
 
     def test_viewer_cannot_access_audit_log(self, viewer_user, rbac_project, setup_members):
         client = _client_for(viewer_user)

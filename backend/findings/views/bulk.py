@@ -20,7 +20,7 @@ from projects.permissions import get_project_for_user
 @throttle_classes([BulkOperationThrottle])
 def bulk_update_findings(request, project_slug):
     """Apply a bulk action (status_change or false_positive) to multiple findings at once."""
-    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.MEMBER)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.ADMIN)
     finding_ids = request.data.get("finding_ids", [])
     action = request.data.get("action")  # "status_change" | "false_positive"
 

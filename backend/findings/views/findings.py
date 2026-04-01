@@ -83,7 +83,7 @@ def finding_list(request, project_slug):
 @api_view(["GET", "PATCH"])
 def finding_detail(request, project_slug, finding_id):
     """Retrieve or update a single finding. PATCH accepts status and ticket URL fields."""
-    min_role = ProjectMembership.Role.MEMBER if request.method == "PATCH" else ProjectMembership.Role.VIEWER
+    min_role = ProjectMembership.Role.ADMIN if request.method == "PATCH" else ProjectMembership.Role.VIEWER
     project = get_project_for_user(request, project_slug, min_role=min_role)
     finding = get_object_or_404(
         Finding.objects.select_related("rule").prefetch_related(

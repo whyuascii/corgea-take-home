@@ -14,6 +14,11 @@ class Scan(models.Model):
     )
     scanned_at = models.DateTimeField(auto_now_add=True)
     source = models.CharField(max_length=20, choices=Source.choices)
+    scanner_type = models.CharField(
+        max_length=20,
+        choices=[("semgrep", "Semgrep"), ("sarif", "SARIF"), ("generic", "Generic")],
+        default="semgrep",
+    )
     total_findings_count = models.IntegerField(default=0)
     new_count = models.IntegerField(default=0)
     resolved_count = models.IntegerField(default=0)
@@ -26,6 +31,7 @@ class Scan(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [

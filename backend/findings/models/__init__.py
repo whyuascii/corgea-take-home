@@ -3,6 +3,7 @@ from .finding import Finding
 from .history import FindingHistory
 from .audit import AuditLog
 from .comment import FindingComment
+from .sla import SLAPolicy
 
 __all__ = [
     "Rule",
@@ -10,4 +11,5 @@ __all__ = [
     "FindingHistory",
     "AuditLog",
     "FindingComment",
+    "SLAPolicy",
 ]

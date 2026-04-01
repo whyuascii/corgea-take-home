@@ -7,6 +7,7 @@ from .overview import overview_rules, overview_findings, overview_summary
 from .bulk import bulk_update_findings
 from .comments import finding_comments, finding_comment_delete
 from .audit import audit_log_list
+from .compliance import compliance_dashboard, sla_breaches, sla_policies, sla_policy_detail
 
 __all__ = [
     "rule_list",
@@ -26,4 +27,8 @@ __all__ = [
     "finding_comments",
     "finding_comment_delete",
     "audit_log_list",
+    "compliance_dashboard",
+    "sla_breaches",
+    "sla_policies",
+    "sla_policy_detail",
 ]

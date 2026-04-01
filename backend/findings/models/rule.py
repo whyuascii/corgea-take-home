@@ -28,6 +28,11 @@ class Rule(models.Model):
                 fields=["project", "status"],
                 name="rule_proj_status_idx",
             ),
+            # Cross-project FP propagation + overview_rules group by semgrep_rule_id
+            models.Index(
+                fields=["semgrep_rule_id"],
+                name="rule_semgrep_id_idx",
+            ),
         ]
         ordering = ["-created_at"]
 

@@ -2,14 +2,19 @@ from django.db.models import Count, Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from core.cache import cached_view
+from core.constants import CACHE_TTL_PROJECT, RECENT_SCANS_LIMIT, TOP_RULES_LIMIT
+from projects.membership import ProjectMembership
+from scans.models import Scan
 from ..models import Finding, Rule
-from .helpers import get_project_for_user
+from projects.permissions import get_project_for_user
 
 
 @api_view(["GET"])
+@cached_view("project_summary", timeout=CACHE_TTL_PROJECT)
 def project_summary(request, project_slug):
     """Return aggregate project statistics"""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
 
     # Consolidate status counts into a single query using conditional aggregation
     findings_qs = Finding.objects.filter(project=project)
@@ -44,15 +49,13 @@ def project_summary(request, project_slug):
             )
         )
         .filter(active_findings__gt=0)
-        .order_by("-active_findings")[:10]
+        .order_by("-active_findings")[:TOP_RULES_LIMIT]
     )
-
-    from scans.models import Scan
 
     recent_scans = Scan.objects.filter(project=project).only(
         "id", "scanned_at", "new_count", "resolved_count",
         "reopened_count", "total_findings_count",
-    )[:10]
+    )[:RECENT_SCANS_LIMIT]
 
     return Response(
         {

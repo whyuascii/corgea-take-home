@@ -1,22 +1,26 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+from rest_framework import status as http_status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from core.constants import MAX_NOTES_LENGTH
 from core.pagination import paginate_queryset
-from ..audit import log_audit
+from projects.membership import ProjectMembership
+from core.audit import log_audit
 from ..models import AuditLog, Finding, FindingHistory
 from ..serializers import (
     FindingDetailSerializer,
     FindingHistorySerializer,
     FindingSerializer,
 )
-from .helpers import get_project_for_user
+from projects.permissions import get_project_for_user
 
 
 @api_view(["GET"])
 def finding_list(request, project_slug):
     """List findings for a project, with optional filters for status, severity, rule, scan, and false positive state."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
     findings = (
         Finding.objects.filter(project=project)
         .select_related("rule")
@@ -49,7 +53,8 @@ def finding_list(request, project_slug):
 @api_view(["GET", "PATCH"])
 def finding_detail(request, project_slug, finding_id):
     """Retrieve or update a single finding. PATCH accepts status and ticket URL fields."""
-    project = get_project_for_user(request, project_slug)
+    min_role = ProjectMembership.Role.MEMBER if request.method == "PATCH" else ProjectMembership.Role.VIEWER
+    project = get_project_for_user(request, project_slug, min_role=min_role)
     finding = get_object_or_404(
         Finding.objects.select_related("rule").prefetch_related(
             "history", "comments", "comments__user"
@@ -59,31 +64,48 @@ def finding_detail(request, project_slug, finding_id):
     )
 
     if request.method == "PATCH":
-        old_status = finding.status
-        serializer = FindingSerializer(finding, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # Validate input types before processing
+        if "status" in request.data and not isinstance(request.data["status"], str):
+            return Response(
+                {"error": "status must be a string"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        if "notes" in request.data and not isinstance(request.data["notes"], str):
+            return Response(
+                {"error": "notes must be a string"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
 
-        if "status" in request.data and request.data["status"] != old_status:
-            FindingHistory.objects.create(
-                finding=finding,
-                old_status=old_status,
-                new_status=finding.status,
-                changed_by=request.user,
-                jira_ticket_url=finding.jira_ticket_url,
-                linear_ticket_url=finding.linear_ticket_url,
-                pr_url=finding.pr_url,
-                notes=request.data.get("notes", ""),
+        with transaction.atomic():
+            # Re-fetch with select_for_update to prevent concurrent status conflicts
+            finding = Finding.objects.select_for_update().select_related("rule").get(
+                id=finding_id, project=project
             )
-            log_audit(
-                request,
-                AuditLog.Action.FINDING_STATUS_CHANGE,
-                "finding",
-                finding.id,
-                project,
-                {"old_status": old_status, "new_status": finding.status},
-            )
-        finding.refresh_from_db()
+            old_status = finding.status
+            serializer = FindingSerializer(finding, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+            if "status" in request.data and request.data["status"] != old_status:
+                FindingHistory.objects.create(
+                    finding=finding,
+                    old_status=old_status,
+                    new_status=finding.status,
+                    changed_by=request.user,
+                    jira_ticket_url=finding.jira_ticket_url,
+                    linear_ticket_url=finding.linear_ticket_url,
+                    pr_url=finding.pr_url,
+                    notes=str(request.data.get("notes", ""))[:MAX_NOTES_LENGTH],
+                )
+                log_audit(
+                    request,
+                    AuditLog.Action.FINDING_STATUS_CHANGE,
+                    "finding",
+                    finding.id,
+                    project,
+                    {"old_status": old_status, "new_status": finding.status},
+                )
+            finding.refresh_from_db()
 
     serializer = FindingDetailSerializer(finding)
     return Response(serializer.data)
@@ -92,7 +114,7 @@ def finding_detail(request, project_slug, finding_id):
 @api_view(["GET"])
 def finding_history(request, project_slug, finding_id):
     """Return the status-change history for a single finding, ordered by most recent first."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
     finding = get_object_or_404(Finding, id=finding_id, project=project)
     history = FindingHistory.objects.filter(finding=finding).select_related("changed_by")
     return paginate_queryset(history, request, FindingHistorySerializer, page_size=50)

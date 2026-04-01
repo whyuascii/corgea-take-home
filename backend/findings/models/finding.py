@@ -1,5 +1,8 @@
 import uuid
+from django.core.validators import MaxLengthValidator
 from django.db import models
+
+from core.constants import MAX_REASON_LENGTH
 
 from .rule import Rule
 
@@ -32,13 +35,15 @@ class Finding(models.Model):
         "scans.Scan", on_delete=models.SET_NULL, null=True, related_name="seen_findings",
     )
     is_false_positive = models.BooleanField(default=False)
-    false_positive_reason = models.TextField(blank=True, default="")
+    false_positive_reason = models.TextField(blank=True, default="", validators=[MaxLengthValidator(MAX_REASON_LENGTH)])
     jira_ticket_id = models.CharField(max_length=100, blank=True, default="")
     jira_ticket_url = models.URLField(blank=True, default="")
     linear_ticket_id = models.CharField(max_length=100, blank=True, default="")
     linear_ticket_url = models.URLField(blank=True, default="")
     severity_override = models.CharField(max_length=20, blank=True, default="")
     pr_url = models.URLField(blank=True, default="")
+    sla_deadline = models.DateTimeField(null=True, blank=True)
+    sla_breached = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -54,6 +59,20 @@ class Finding(models.Model):
             models.Index(
                 fields=["project", "status", "is_false_positive"],
                 name="finding_proj_status_fp_idx",
+            ),
+            # Overview/ordering: paginated lists across projects sort by created_at
+            models.Index(
+                fields=["project", "-created_at"],
+                name="finding_proj_created_idx",
+            ),
+            # Cross-project FP propagation in ingestion: rule FK + false_positive flag
+            models.Index(
+                fields=["rule", "is_false_positive"],
+                name="finding_rule_fp_idx",
+            ),
+            models.Index(
+                fields=["project", "sla_breached", "status"],
+                name="finding_sla_breach_idx",
             ),
         ]
         ordering = ["-created_at"]

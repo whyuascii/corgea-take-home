@@ -1,29 +1,71 @@
+import uuid
+
 from django.db import transaction
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
-from ..models import Finding, FindingHistory
-from .helpers import get_project_for_user
+from core.audit import log_audit
+from core.constants import BULK_OPERATION_LIMIT, VALID_BULK_ACTIONS
+from core.throttles import BulkOperationThrottle
+from projects.membership import ProjectMembership
+from ..models import AuditLog, Finding, FindingHistory
+from projects.permissions import get_project_for_user
 
 
 @api_view(["POST"])
+@throttle_classes([BulkOperationThrottle])
 def bulk_update_findings(request, project_slug):
     """Apply a bulk action (status_change or false_positive) to multiple findings at once."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.MEMBER)
     finding_ids = request.data.get("finding_ids", [])
-    action = request.data.get("action")  # "status_change", "false_positive", "ignore"
+    action = request.data.get("action")  # "status_change" | "false_positive"
 
+    if not isinstance(finding_ids, list):
+        return Response(
+            {"error": "finding_ids must be a list"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     if not finding_ids or not action:
         return Response(
-            {"error": "finding_ids and action required"},
+            {"error": "finding_ids (list) and action required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    findings = list(Finding.objects.filter(id__in=finding_ids, project=project))
+    # Validate each finding_id is a valid UUID
+    validated_ids = []
+    for id_str in finding_ids:
+        try:
+            validated_ids.append(uuid.UUID(str(id_str)))
+        except (ValueError, AttributeError):
+            return Response(
+                {"error": f"Invalid UUID in finding_ids: {id_str}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    finding_ids = validated_ids
+
+    if len(finding_ids) > BULK_OPERATION_LIMIT:
+        return Response(
+            {"error": f"Maximum {BULK_OPERATION_LIMIT} findings per bulk operation."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if action not in VALID_BULK_ACTIONS:
+        return Response(
+            {"error": f"action must be one of: {', '.join(sorted(VALID_BULK_ACTIONS))}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     updated = 0
 
     with transaction.atomic():
+        findings = list(
+            Finding.objects.select_for_update().filter(id__in=finding_ids, project=project)
+        )
+        if len(findings) != len(set(finding_ids)):
+            return Response(
+                {"error": "One or more finding_ids not found in this project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if action == "status_change":
             new_status = request.data.get("status")
             if new_status not in [c[0] for c in Finding.Status.choices]:
@@ -52,7 +94,17 @@ def bulk_update_findings(request, project_slug):
 
         elif action == "false_positive":
             is_fp = request.data.get("is_false_positive", True)
+            if not isinstance(is_fp, bool):
+                return Response(
+                    {"error": "is_false_positive must be a boolean"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             reason = request.data.get("reason", "")
+            if reason is not None and not isinstance(reason, str):
+                return Response(
+                    {"error": "reason must be a string"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             to_update = []
             history_records = []
@@ -78,5 +130,17 @@ def bulk_update_findings(request, project_slug):
                 )
                 FindingHistory.objects.bulk_create(history_records)
             updated = len(to_update)
+
+    if updated > 0:
+        if action == "status_change":
+            log_audit(
+                request, AuditLog.Action.FINDING_STATUS_CHANGE, "finding", "",
+                project, {"bulk": True, "count": updated, "new_status": new_status},
+            )
+        elif action == "false_positive":
+            log_audit(
+                request, AuditLog.Action.FINDING_FALSE_POSITIVE, "finding", "",
+                project, {"bulk": True, "count": updated, "is_false_positive": is_fp},
+            )
 
     return Response({"updated": updated})

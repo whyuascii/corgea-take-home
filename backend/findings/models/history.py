@@ -1,6 +1,9 @@
 import uuid
 from django.conf import settings
+from django.core.validators import MaxLengthValidator
 from django.db import models
+
+from core.constants import MAX_NOTES_LENGTH
 
 from .finding import Finding
 
@@ -10,6 +13,7 @@ class FindingHistory(models.Model):
         STATUS_CHANGE = "status_change"
         FALSE_POSITIVE = "false_positive"
         TICKET_CREATED = "ticket_created"
+        TICKET_CLOSED = "ticket_closed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     finding = models.ForeignKey(
@@ -29,7 +33,7 @@ class FindingHistory(models.Model):
     jira_ticket_url = models.URLField(blank=True, default="")
     linear_ticket_url = models.URLField(blank=True, default="")
     pr_url = models.URLField(blank=True, default="")
-    notes = models.TextField(blank=True, default="")
+    notes = models.TextField(blank=True, default="", validators=[MaxLengthValidator(MAX_NOTES_LENGTH)])
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -37,6 +41,11 @@ class FindingHistory(models.Model):
             models.Index(
                 fields=["finding", "-created_at"],
                 name="fh_finding_created_idx",
+            ),
+            # finding_trends() aggregates resolved history by date
+            models.Index(
+                fields=["new_status", "created_at"],
+                name="fh_status_created_idx",
             ),
         ]
         ordering = ["-created_at"]

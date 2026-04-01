@@ -2,20 +2,30 @@ from django.db.models import Count, F, Q
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from core.cache import cached_view
+from core.constants import CACHE_TTL_OVERVIEW, OVERVIEW_BREAKDOWN_LIMIT, OVERVIEW_RULES_LIMIT
 from core.pagination import paginate_list, paginate_queryset
+from projects.membership import ProjectMembership
 from projects.models import Project
 from ..models import Finding, Rule
 from ..serializers import OverviewFindingSerializer
+
+
+def _user_project_ids(user):
+    """Return project IDs the user has any membership on."""
+    return Project.objects.filter(
+        memberships__user=user
+    ).values_list("id", flat=True).distinct()
 
 
 @api_view(["GET"])
 def overview_rules(request):
     """List rules across all of the authenticated user's projects.
     """
-    user_projects = Project.objects.filter(owner=request.user)
+    project_ids = _user_project_ids(request.user)
     severity = request.query_params.get("severity")
 
-    rules_qs = Rule.objects.filter(project__in=user_projects)
+    rules_qs = Rule.objects.filter(project_id__in=project_ids)
     if severity:
         rules_qs = rules_qs.filter(severity=severity)
 
@@ -29,7 +39,7 @@ def overview_rules(request):
             ),
             project_count=Count("project", distinct=True),
         )
-        .order_by("-finding_count")
+        .order_by("-finding_count")[:OVERVIEW_RULES_LIMIT]
     )
 
     # Fetch ALL project breakdowns in a single query, then group in Python.
@@ -40,7 +50,7 @@ def overview_rules(request):
             name=F("project__name"),
         )
         .annotate(finding_count=Count("findings"))
-        .order_by("semgrep_rule_id")
+        .order_by("semgrep_rule_id")[:OVERVIEW_BREAKDOWN_LIMIT]
     )
 
     # Index breakdowns by semgrep_rule_id for lookup
@@ -70,9 +80,9 @@ def overview_rules(request):
 @api_view(["GET"])
 def overview_findings(request):
     """List findings across all of the authenticated user's projects, with optional filters for project, status, severity, and rule."""
-    user_projects = Project.objects.filter(owner=request.user)
+    project_ids = _user_project_ids(request.user)
     findings = (
-        Finding.objects.filter(project__in=user_projects)
+        Finding.objects.filter(project_id__in=project_ids)
         .select_related("rule", "project")
         .defer("code_snippet", "metadata")
     )
@@ -97,10 +107,11 @@ def overview_findings(request):
 
 
 @api_view(["GET"])
+@cached_view("overview_summary", timeout=CACHE_TTL_OVERVIEW)
 def overview_summary(request):
     """Return cross-project summary statistics"""
-    user_projects = Project.objects.filter(owner=request.user)
-    findings = Finding.objects.filter(project__in=user_projects)
+    project_ids = _user_project_ids(request.user)
+    findings = Finding.objects.filter(project_id__in=project_ids)
 
     severity_dist = (
         findings.values(severity=F("rule__severity"))

@@ -5,15 +5,33 @@ from django.db import models
 
 class AuditLog(models.Model):
     class Action(models.TextChoices):
+        # Auth events — critical for SOC 2 / compliance auditing.
+        LOGIN = "login"
+        LOGIN_FAILED = "login_failed"
+        REGISTER = "register"
+        LOGOUT = "logout"
+        PROFILE_UPDATE = "profile_update"
+        # Resource events
         PROJECT_CREATE = "project_create"
+        PROJECT_UPDATE = "project_update"
         PROJECT_DELETE = "project_delete"
         SCAN_UPLOAD = "scan_upload"
         SCAN_PUSH = "scan_push"
         FINDING_STATUS_CHANGE = "finding_status_change"
         FINDING_FALSE_POSITIVE = "finding_false_positive"
         RULE_STATUS_CHANGE = "rule_status_change"
+        COMMENT_CREATED = "comment_created"
+        COMMENT_DELETED = "comment_deleted"
         INTEGRATION_CHANGE = "integration_change"
         API_KEY_REGENERATE = "api_key_regenerate"
+        # Membership events
+        MEMBER_ADDED = "member_added"
+        MEMBER_REMOVED = "member_removed"
+        MEMBER_ROLE_CHANGED = "member_role_changed"
+        # Password reset events
+        PASSWORD_RESET_REQUEST = "password_reset_request"
+        PASSWORD_RESET_COMPLETE = "password_reset_complete"
+        PASSWORD_CHANGE = "password_change"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

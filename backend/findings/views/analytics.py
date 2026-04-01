@@ -5,23 +5,43 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework.decorators import api_view
+from rest_framework import status
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
+from core.constants import DB_ITERATOR_CHUNK_SIZE, DEFAULT_TREND_DAYS, MAX_EXPORT_ROWS, MAX_TREND_DAYS, SEARCH_QUERY_MAX_LEN, SEARCH_QUERY_MIN_LEN
 from core.pagination import paginate_queryset
+from core.throttles import ExportThrottle
+from projects.membership import ProjectMembership
 from ..models import Finding, FindingHistory
 from ..serializers import FindingSerializer
-from .helpers import get_project_for_user
+from projects.permissions import get_project_for_user
 
-# Maximum number of rows allowed in CSV export to prevent OOM on large projects.
-EXPORT_ROW_LIMIT = 50_000
+# Characters that trigger formula execution when the CSV is opened in Excel / Sheets.
+_CSV_FORMULA_CHARS = frozenset("=+-@\t\r")
+
+
+def _safe_csv(value):
+    """Prefix string cell values that start with a formula trigger character.
+    Also handles values with leading whitespace before trigger characters."""
+    if isinstance(value, str) and value:
+        stripped = value.lstrip()
+        if stripped and stripped[0] in _CSV_FORMULA_CHARS:
+            return f"'{value}"
+    return value
 
 
 @api_view(["GET"])
 def finding_trends(request, project_slug):
     """Return daily new and resolved finding counts over a configurable time window (default 30 days)."""
-    project = get_project_for_user(request, project_slug)
-    days = int(request.query_params.get("days", 30))
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
+    try:
+        days = int(request.query_params.get("days", DEFAULT_TREND_DAYS))
+    except (ValueError, TypeError):
+        return Response(
+            {"error": "days must be an integer"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    days = max(1, min(days, MAX_TREND_DAYS))  # Clamp to [1, MAX_TREND_DAYS]
     start_date = timezone.now() - timedelta(days=days)
 
     # Daily new findings (by created_at)
@@ -66,9 +86,10 @@ def finding_trends(request, project_slug):
 
 
 @api_view(["GET"])
+@throttle_classes([ExportThrottle])
 def finding_export(request, project_slug):
     """Export findings as a CSV file, with optional status and severity filters."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
     findings = Finding.objects.filter(project=project).select_related("rule")
 
     # Apply same filters as finding_list
@@ -79,8 +100,8 @@ def finding_export(request, project_slug):
     if severity:
         findings = findings.filter(rule__severity=severity)
 
-    # Cap to EXPORT_ROW_LIMIT to avoid memory exhaustion on very large projects.
-    findings = findings[:EXPORT_ROW_LIMIT]
+    # Cap to MAX_EXPORT_ROWS to avoid memory exhaustion on very large projects.
+    findings = findings[:MAX_EXPORT_ROWS]
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="findings-{project.slug}.csv"'
@@ -101,17 +122,17 @@ def finding_export(request, project_slug):
         ]
     )
 
-    for f in findings.iterator(chunk_size=2000):
+    for f in findings.iterator(chunk_size=DB_ITERATOR_CHUNK_SIZE):
         writer.writerow(
             [
-                f.rule.semgrep_rule_id,
+                _safe_csv(f.rule.semgrep_rule_id),
                 f.rule.severity,
-                f.file_path,
+                _safe_csv(f.file_path),
                 f.line_start,
                 f.line_end,
                 f.status,
                 f.is_false_positive,
-                f.false_positive_reason,
+                _safe_csv(f.false_positive_reason),
                 f.created_at.isoformat(),
                 f.updated_at.isoformat(),
             ]
@@ -123,10 +144,15 @@ def finding_export(request, project_slug):
 @api_view(["GET"])
 def finding_search(request, project_slug):
     """Search findings by file path, rule ID, or code snippet. Requires a query of at least 2 characters."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
     q = request.query_params.get("q", "").strip()
-    if not q or len(q) < 2:
+    if not q or len(q) < SEARCH_QUERY_MIN_LEN:
         return Response({"count": 0, "next": None, "previous": None, "results": []})
+    if len(q) > SEARCH_QUERY_MAX_LEN:
+        return Response(
+            {"error": f"Search query too long (max {SEARCH_QUERY_MAX_LEN} characters)."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     findings = (
         Finding.objects.filter(project=project)

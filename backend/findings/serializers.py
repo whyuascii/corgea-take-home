@@ -1,5 +1,9 @@
+from django.utils import timezone
 from rest_framework import serializers
-from .models import AuditLog, Finding, FindingComment, FindingHistory, Rule
+
+from core.constants import MAX_COMMENT_LENGTH
+
+from .models import AuditLog, Finding, FindingComment, FindingHistory, Rule, SLAPolicy
 
 
 class RuleSerializer(serializers.ModelSerializer):
@@ -47,6 +51,7 @@ class FindingSerializer(serializers.ModelSerializer):
     rule_message = serializers.CharField(source="rule.message", read_only=True)
     severity = serializers.CharField(source="rule.severity", read_only=True)
     effective_severity = serializers.SerializerMethodField()
+    sla_hours_remaining = serializers.SerializerMethodField()
 
     class Meta:
         model = Finding
@@ -58,21 +63,29 @@ class FindingSerializer(serializers.ModelSerializer):
             "first_seen_scan", "last_seen_scan",
             "jira_ticket_id", "jira_ticket_url",
             "linear_ticket_id", "linear_ticket_url",
-            "pr_url",
+            "pr_url", "sla_deadline", "sla_breached", "sla_hours_remaining",
             "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "rule", "file_path", "line_start", "line_end", "metadata",
             "is_false_positive", "false_positive_reason",
             "first_seen_scan", "last_seen_scan", "created_at", "updated_at",
+            "sla_deadline", "sla_breached",
         ]
 
     def get_effective_severity(self, obj):
         return obj.severity_override or obj.rule.severity
 
+    def get_sla_hours_remaining(self, obj):
+        if not obj.sla_deadline:
+            return None
+        remaining = (obj.sla_deadline - timezone.now()).total_seconds() / 3600
+        return round(remaining, 1)
+
 
 class FindingCommentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
+    text = serializers.CharField(max_length=MAX_COMMENT_LENGTH)
 
     class Meta:
         model = FindingComment
@@ -96,6 +109,13 @@ class OverviewFindingSerializer(FindingSerializer):
         fields = FindingSerializer.Meta.fields + ["project_slug", "project_name"]
 
 
+class SLAPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SLAPolicy
+        fields = ["id", "severity", "max_resolution_hours", "notification_threshold_hours", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
 class AuditLogSerializer(serializers.ModelSerializer):
     user = serializers.CharField(source="user.username", read_only=True, default=None)
 
@@ -108,7 +128,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
             "target_id",
             "user",
             "metadata",
-            "ip_address",
+            # ip_address intentionally excluded for privacy (GDPR)
             "created_at",
         ]
         read_only_fields = fields

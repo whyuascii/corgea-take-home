@@ -1,38 +1,69 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from ..audit import log_audit
+from core.constants import MAX_REASON_LENGTH
+from projects.membership import ProjectMembership
+from core.audit import log_audit
 from ..models import AuditLog, Finding, FindingHistory
-from .helpers import get_project_for_user
+from projects.permissions import get_project_for_user
 
 
 @api_view(["POST"])
 def mark_false_positive(request, project_slug, finding_id):
     """Mark or unmark a finding as a false positive, optionally applying across all projects for the same rule."""
-    project = get_project_for_user(request, project_slug)
+    project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.MEMBER)
     finding = get_object_or_404(Finding, id=finding_id, project=project)
 
     is_fp = request.data.get("is_false_positive", True)
+
     reason = request.data.get("reason", "")
-    apply_to_all = request.data.get("apply_to_all_projects", False)
-
-    affected_findings = [finding]
-
-    if apply_to_all and is_fp:
-        cross_project_findings = (
-            Finding.objects.filter(
-                rule__semgrep_rule_id=finding.rule.semgrep_rule_id,
-                project__owner=request.user,
-                is_false_positive=False,
-            )
-            .exclude(id=finding.id)
-            .select_related("rule")
+    if not isinstance(reason, str):
+        return Response(
+            {"error": "reason must be a string"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-        affected_findings.extend(list(cross_project_findings))
+    reason = reason.strip()[:MAX_REASON_LENGTH]
+
+    apply_all = request.data.get("apply_to_all_projects", False)
+    if isinstance(apply_all, str):
+        apply_all = apply_all.lower() in ("true", "1", "yes")
+    elif not isinstance(apply_all, bool):
+        apply_all = False
+    apply_to_all = apply_all
 
     with transaction.atomic():
+        # Lock the primary finding row first.
+        finding = Finding.objects.select_for_update().get(pk=finding.pk)
+        affected_findings = [finding]
+
+        if apply_to_all and is_fp:
+            # Get all projects the user has at least MEMBER access to.
+            user_project_ids = ProjectMembership.objects.filter(
+                user=request.user,
+                role__in=[
+                    ProjectMembership.Role.MEMBER,
+                    ProjectMembership.Role.ADMIN,
+                    ProjectMembership.Role.OWNER,
+                ],
+            ).values_list("project_id", flat=True)
+
+            # select_for_update prevents concurrent FP marking from racing
+            # on the same finding rows across projects.
+            cross_project_findings = (
+                Finding.objects.select_for_update()
+                .filter(
+                    rule__semgrep_rule_id=finding.rule.semgrep_rule_id,
+                    project_id__in=user_project_ids,
+                    is_false_positive=False,
+                )
+                .exclude(id=finding.id)
+                .select_related("rule")
+            )
+            affected_findings.extend(list(cross_project_findings))
+
         history_records = []
         for f in affected_findings:
             old_fp = f.is_false_positive

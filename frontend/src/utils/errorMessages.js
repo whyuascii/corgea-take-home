@@ -55,36 +55,3 @@ export function getErrorMessage(error, fallback = 'An unexpected error occurred'
 
   return fallback
 }
-
-/**
- * Extract field-level errors from a DRF error response.
- *
- * @param {Error} error - Axios error
- * @returns {Object} Mapping of field names to arrays of error strings, e.g.
- *   { email: ["This field is required."], password: ["Too short."] }
- */
-export function getFieldErrors(error) {
-  if (!error?.response?.data) {
-    return {}
-  }
-
-  const data = error.response.data
-
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-    return {}
-  }
-
-  const fields = {}
-  for (const [key, value] of Object.entries(data)) {
-    // Skip non-field keys like "detail" or "error"
-    if (key === 'detail' || key === 'error') continue
-
-    if (Array.isArray(value)) {
-      fields[key] = value.map(String)
-    } else if (typeof value === 'string') {
-      fields[key] = [value]
-    }
-  }
-
-  return fields
-}

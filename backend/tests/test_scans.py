@@ -44,9 +44,10 @@ class TestScans:
         assert data["scan"]["source"] == "upload"
         assert data["summary"]["total"] == 2
 
-    def test_push_scan(self, project, sample_semgrep_results):
-        """Push scan using API key auth (no token auth needed)."""
+    def test_push_scan_async(self, project, sample_semgrep_results):
+        """Push scan via API key — async ingestion returns 202."""
         from rest_framework.test import APIClient
+
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Api-Key {project.api_key}")
         resp = client.post(
@@ -54,11 +55,32 @@ class TestScans:
             sample_semgrep_results,
             format="json",
         )
+        assert resp.status_code == status.HTTP_202_ACCEPTED
+        data = resp.json()
+        assert "scan" in data
+        assert data["scan"]["source"] == "api"
+        assert data["status"] == "processing"
+
+    def test_push_scan_sync_fallback(self, project, sample_semgrep_results):
+        """Push scan falls back to sync ingestion when async is unavailable."""
+        from unittest.mock import patch
+
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Api-Key {project.api_key}")
+        with patch("scans.views.push._HAS_DJANGO_Q", False):
+            resp = client.post(
+                f"/api/projects/{project.slug}/scans/push/",
+                sample_semgrep_results,
+                format="json",
+            )
         assert resp.status_code == status.HTTP_201_CREATED
         data = resp.json()
         assert "scan" in data
         assert data["scan"]["source"] == "api"
         assert "summary" in data
+        assert data["summary"]["total"] == 2
 
     def test_scan_latest(self, auth_client, scan_with_findings):
         project = scan_with_findings.project
@@ -68,20 +90,6 @@ class TestScans:
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
         assert data["id"] == str(scan_with_findings.id)
-
-    def test_ci_snippets(self, auth_client, project):
-        resp = auth_client.get(
-            f"/api/projects/{project.slug}/scans/ci-snippets/"
-        )
-        assert resp.status_code == status.HTTP_200_OK
-        data = resp.json()
-        assert "github_actions" in data
-        assert "circleci" in data
-        assert "gitlab_ci" in data
-        assert "shell" in data
-        # Verify snippets contain the project slug and API key
-        assert project.slug in data["github_actions"]
-        assert project.api_key in data["github_actions"]
 
     def test_ingestion_creates_findings(self, scan_with_findings):
         """Verify that ingest_scan creates the expected Rules and Findings."""

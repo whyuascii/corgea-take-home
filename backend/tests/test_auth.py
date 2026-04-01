@@ -11,7 +11,7 @@ class TestAuth:
         resp = client.post("/api/auth/register/", {
             "username": "newuser",
             "email": "new@example.com",
-            "password": "securepass123",
+            "password": "X9k#mP2vLq!w",
         })
         assert resp.status_code == status.HTTP_201_CREATED
         data = resp.json()

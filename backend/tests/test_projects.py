@@ -25,7 +25,7 @@ class TestProjects:
         data = resp.json()
         assert data["name"] == "New Project"
         assert data["slug"] == "new-project"
-        assert "api_key" in data
+        assert "api_key_hint" in data
 
     def test_get_project(self, auth_client, project):
         resp = auth_client.get(f"/api/projects/{project.slug}/")
@@ -49,15 +49,17 @@ class TestProjects:
         resp = auth_client.delete(f"/api/projects/{project.slug}/")
         assert resp.status_code == status.HTTP_204_NO_CONTENT
 
-    def test_regenerate_api_key(self, auth_client, project):
+    def test_rotate_api_key(self, auth_client, project):
         old_api_key = project.api_key
         resp = auth_client.post(
-            f"/api/projects/{project.slug}/regenerate_api_key/"
+            f"/api/projects/{project.slug}/rotate_api_key/"
         )
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
-        assert "api_key" in data
         assert data["api_key"] != old_api_key
+        project.refresh_from_db()
+        assert project.old_api_key == old_api_key
+        assert project.old_key_expires_at is not None
 
     def test_other_user_cannot_see_project(self, other_auth_client, project):
         resp = other_auth_client.get(f"/api/projects/{project.slug}/")

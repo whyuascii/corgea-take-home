@@ -6,6 +6,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from findings.models import Finding, FindingHistory, Rule
+from projects.membership import ProjectMembership
 from projects.models import Project
 from scans.ingestion import ingest_scan
 from scans.models import Scan
@@ -98,15 +99,45 @@ def other_auth_client(other_user):
 
 
 @pytest.fixture
+def admin_user(db):
+    """Create a test user with admin role for RBAC tests."""
+    return User.objects.create_user(
+        username="adminuser", email="admin@example.com", password="adminpass1234!",
+    )
+
+
+@pytest.fixture
+def member_user(db):
+    """Create a test user with member role for RBAC tests."""
+    return User.objects.create_user(
+        username="memberuser", email="member@example.com", password="memberpass1234!",
+    )
+
+
+@pytest.fixture
+def viewer_user(db):
+    """Create a test user with viewer role for RBAC tests."""
+    return User.objects.create_user(
+        username="vieweruser", email="viewer@example.com", password="viewerpass1234!",
+    )
+
+
+@pytest.fixture
 def project(user):
     """Create a test project owned by the default user."""
-    return Project.objects.create(
+    p = Project.objects.create(
         owner=user,
         name="Test Project",
         slug="test-project",
         description="A project for testing",
         repository_url="https://github.com/example/repo",
     )
+
+    ProjectMembership.objects.get_or_create(
+        project=p, user=user,
+        defaults={"role": ProjectMembership.Role.OWNER},
+    )
+    return p
 
 
 @pytest.fixture

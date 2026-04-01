@@ -1,7 +1,8 @@
 import pytest
 from rest_framework import status
 
-from findings.models import Finding, FindingComment, FindingHistory, Rule
+from findings.models import AuditLog, Finding, FindingComment, FindingHistory, Rule
+from integrations.models import IntegrationConfig, StatusMapping
 from tests.conftest import get_results
 
 
@@ -16,7 +17,7 @@ class TestFindings:
         assert resp.status_code == status.HTTP_200_OK
         results = get_results(resp)
         assert len(results) >= 1
-        # Each finding should have key serializer fields
+
         first = results[0]
         assert "id" in first
         assert "rule_id_display" in first
@@ -45,7 +46,7 @@ class TestFindings:
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
         assert data["status"] == "resolved"
-        # Verify history was created
+
         assert FindingHistory.objects.filter(
             finding=finding, new_status="resolved"
         ).exists()
@@ -57,7 +58,7 @@ class TestFindings:
         )
         assert resp.status_code == status.HTTP_200_OK
         results = get_results(resp)
-        # At least one history entry from ingestion
+
         assert len(results) >= 1
 
     def test_finding_trends(self, auth_client, scan_with_findings):
@@ -67,7 +68,7 @@ class TestFindings:
         )
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
-        # trends returns a list of daily data points (either paginated or raw list)
+
         results = get_results(resp)
         assert len(results) > 0
         first_day = results[0]
@@ -247,3 +248,195 @@ class TestFindings:
             assert isinstance(data["results"], list)
         else:
             assert isinstance(data, list)
+
+
+@pytest.mark.django_db
+class TestAuditCoverage:
+    """Verify that state-changing operations produce audit log entries."""
+
+    def test_profile_update_audit(self, auth_client, user):
+        AuditLog.objects.all().delete()
+        resp = auth_client.patch(
+            "/api/auth/me/",
+            {"first_name": "Updated", "current_password": "testpass1234"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(action=AuditLog.Action.PROFILE_UPDATE).first()
+        assert entry is not None
+        assert entry.user == user
+        assert "first_name" in entry.metadata["updated_fields"]
+
+    def test_project_update_audit(self, auth_client, project):
+        AuditLog.objects.all().delete()
+        resp = auth_client.patch(
+            f"/api/projects/{project.slug}/",
+            {"description": "Audit test"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(action=AuditLog.Action.PROJECT_UPDATE).first()
+        assert entry is not None
+        assert str(entry.target_id) == str(project.id)
+
+    def test_rule_update_audit(self, auth_client, rule):
+        AuditLog.objects.all().delete()
+        project = rule.project
+        resp = auth_client.patch(
+            f"/api/projects/{project.slug}/findings/rules/{rule.id}/",
+            {"status": "ignored"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(action=AuditLog.Action.RULE_STATUS_CHANGE).first()
+        assert entry is not None
+        assert entry.metadata["old_status"] == "active"
+        assert entry.metadata["new_status"] == "ignored"
+        assert "affected_findings" in entry.metadata
+
+    def test_bulk_status_change_audit(self, auth_client, scan_with_findings):
+        AuditLog.objects.all().delete()
+        project = scan_with_findings.project
+        finding_ids = list(
+            Finding.objects.filter(project=project).values_list("id", flat=True)
+        )
+        resp = auth_client.post(
+            f"/api/projects/{project.slug}/findings/bulk/",
+            {
+                "finding_ids": [str(fid) for fid in finding_ids],
+                "action": "status_change",
+                "status": "resolved",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(
+            action=AuditLog.Action.FINDING_STATUS_CHANGE,
+            metadata__bulk=True,
+        ).first()
+        assert entry is not None
+        assert entry.metadata["new_status"] == "resolved"
+        assert entry.metadata["count"] >= 1
+
+    def test_bulk_false_positive_audit(self, auth_client, scan_with_findings):
+        AuditLog.objects.all().delete()
+        project = scan_with_findings.project
+        finding_ids = list(
+            Finding.objects.filter(project=project).values_list("id", flat=True)
+        )
+        resp = auth_client.post(
+            f"/api/projects/{project.slug}/findings/bulk/",
+            {
+                "finding_ids": [str(fid) for fid in finding_ids],
+                "action": "false_positive",
+                "is_false_positive": True,
+                "reason": "test",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(
+            action=AuditLog.Action.FINDING_FALSE_POSITIVE,
+            metadata__bulk=True,
+        ).first()
+        assert entry is not None
+        assert entry.metadata["is_false_positive"] is True
+
+    def test_comment_created_audit(self, auth_client, finding):
+        AuditLog.objects.all().delete()
+        project = finding.project
+        resp = auth_client.post(
+            f"/api/projects/{project.slug}/findings/{finding.id}/comments/",
+            {"text": "Audit test comment"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        entry = AuditLog.objects.filter(action=AuditLog.Action.COMMENT_CREATED).first()
+        assert entry is not None
+        assert entry.metadata["finding_id"] == str(finding.id)
+
+    def test_comment_deleted_audit(self, auth_client, finding):
+        AuditLog.objects.all().delete()
+        project = finding.project
+        resp = auth_client.post(
+            f"/api/projects/{project.slug}/findings/{finding.id}/comments/",
+            {"text": "Will be deleted"},
+            format="json",
+        )
+        comment_id = resp.json()["id"]
+        AuditLog.objects.all().delete()
+        resp = auth_client.delete(
+            f"/api/projects/{project.slug}/findings/{finding.id}/comments/{comment_id}/"
+        )
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        entry = AuditLog.objects.filter(action=AuditLog.Action.COMMENT_DELETED).first()
+        assert entry is not None
+        assert entry.metadata["comment_id"] == comment_id
+
+    def test_mapping_created_audit(self, auth_client, project):
+        config = IntegrationConfig.objects.create(
+            project=project,
+            provider=IntegrationConfig.Provider.JIRA,
+            jira_instance_url="https://test.atlassian.net",
+            jira_project_key="TEST",
+        )
+        AuditLog.objects.all().delete()
+        resp = auth_client.post(
+            f"/api/projects/{project.slug}/integrations/{config.id}/mappings/",
+            {"external_status": "Done", "internal_status": "resolved"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        entry = AuditLog.objects.filter(
+            action=AuditLog.Action.INTEGRATION_CHANGE,
+            metadata__action="mapping_created",
+        ).first()
+        assert entry is not None
+
+    def test_mapping_updated_audit(self, auth_client, project):
+        config = IntegrationConfig.objects.create(
+            project=project,
+            provider=IntegrationConfig.Provider.JIRA,
+            jira_instance_url="https://test.atlassian.net",
+            jira_project_key="TEST",
+        )
+        mapping = StatusMapping.objects.create(
+            integration=config,
+            external_status="In Progress",
+            internal_status="open",
+        )
+        AuditLog.objects.all().delete()
+        resp = auth_client.patch(
+            f"/api/projects/{project.slug}/integrations/{config.id}/mappings/{mapping.id}/",
+            {"internal_status": "resolved"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        entry = AuditLog.objects.filter(
+            action=AuditLog.Action.INTEGRATION_CHANGE,
+            metadata__action="mapping_updated",
+        ).first()
+        assert entry is not None
+
+    def test_mapping_deleted_audit(self, auth_client, project):
+        config = IntegrationConfig.objects.create(
+            project=project,
+            provider=IntegrationConfig.Provider.JIRA,
+            jira_instance_url="https://test.atlassian.net",
+            jira_project_key="TEST",
+        )
+        mapping = StatusMapping.objects.create(
+            integration=config,
+            external_status="Done",
+            internal_status="resolved",
+        )
+        AuditLog.objects.all().delete()
+        resp = auth_client.delete(
+            f"/api/projects/{project.slug}/integrations/{config.id}/mappings/{mapping.id}/"
+        )
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        entry = AuditLog.objects.filter(
+            action=AuditLog.Action.INTEGRATION_CHANGE,
+            metadata__action="mapping_deleted",
+        ).first()
+        assert entry is not None

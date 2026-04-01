@@ -13,7 +13,7 @@ from findings.models import AuditLog
 
 from .membership import ProjectMembership
 from .models import Project, generate_api_key
-from .permissions import get_project_for_user, HasProjectRole
+from .permissions import HasProjectRole
 from .serializers import ProjectSerializer
 
 

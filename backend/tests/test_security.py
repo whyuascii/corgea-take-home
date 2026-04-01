@@ -221,23 +221,19 @@ class TestRegistrationValidation:
         })
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    @override_settings(
-        REST_FRAMEWORK={
-            "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
-            "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-            "DEFAULT_THROTTLE_RATES": {"anon": "60/minute", "user": "300/minute", "login": "5/minute", "registration": "2/hour"},
-            "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
-        }
-    )
     def test_registration_rate_limiting(self):
-        client = APIClient()
-        for i in range(3):
-            resp = client.post("/api/auth/register/", {
+        from django.core.cache import cache
+        cache.clear()
+        for i in range(4):
+            # Fresh client each iteration so the auth cookie set by a
+            # successful registration doesn't carry over and cause
+            # AnonRateThrottle to skip throttling for authenticated users.
+            resp = APIClient().post("/api/auth/register/", {
                 "username": f"ratelimit{i}",
                 "email": f"ratelimit{i}@example.com",
                 "password": "X9k#mP2vLq!w",
             })
-        # Third request should be throttled (limit is 2/hour in override)
+        # Fourth request should be throttled (default limit is 3/hour)
         assert resp.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
 @pytest.mark.django_db

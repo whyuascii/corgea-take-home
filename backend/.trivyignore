@@ -1,0 +1,4 @@
+# False positive: test/example private key embedded in autobahn library source
+# (dependency of Daphne/Django Channels)
+# File: autobahn/wamp/cryptosign.py - contains a hardcoded example key for documentation
+private-key

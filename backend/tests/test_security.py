@@ -5,12 +5,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from core.fields import EncryptedTextField
 from integrations.models import IntegrationConfig
-from projects.models import Project
 
 User = get_user_model()
 
@@ -427,7 +425,9 @@ class TestWebhookPayloadValidation:
 
     def test_jira_webhook_rejects_oversized_issue_key(self, project):
         """Jira webhook should reject issue_key longer than 200 chars."""
-        import hashlib, hmac, json
+        import hashlib
+        import hmac
+        import json
         config = self._create_jira_config(project)
         payload = {
             "issue": {

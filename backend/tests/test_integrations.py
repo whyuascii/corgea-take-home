@@ -1,10 +1,9 @@
 import hashlib
 import hmac
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
-from django.db.models import Q
 from rest_framework import status
 
 from findings.models import Finding, FindingHistory

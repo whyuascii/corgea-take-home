@@ -1,11 +1,9 @@
-import json
-
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from findings.models import Finding, FindingHistory, Rule
+from findings.models import Finding, Rule
 from projects.membership import ProjectMembership
 from projects.models import Project
 from scans.ingestion import ingest_scan

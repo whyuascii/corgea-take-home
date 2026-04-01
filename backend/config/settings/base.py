@@ -100,7 +100,7 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",   # fallback for existing hashes during migration
 ]
 
-from core.constants import DATA_RETENTION_DAYS, PASSWORD_MIN_LENGTH, Q_TASK_RETRY, Q_TASK_TIMEOUT
+from core.constants import DATA_RETENTION_DAYS, PASSWORD_MIN_LENGTH, Q_TASK_RETRY, Q_TASK_TIMEOUT  # noqa: E402
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

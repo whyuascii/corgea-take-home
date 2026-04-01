@@ -4,7 +4,7 @@ import os
 os.environ.setdefault("DJANGO_SECRET_KEY", "dev-secret-key-do-not-use-in-production")
 os.environ.setdefault("FIELD_ENCRYPTION_KEY", "dev-encryption-key-do-not-use-in-production")
 
-from .base import *
+from .base import *  # noqa: F403
 
 DEBUG = True
 ALLOWED_HOSTS = ["*"]

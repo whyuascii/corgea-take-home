@@ -5,7 +5,7 @@ import pytest
 from rest_framework import status
 
 from findings.models import Finding, Rule
-from tests.conftest import SAMPLE_SEMGREP_RESULTS, get_results
+from tests.conftest import get_results
 
 
 @pytest.mark.django_db

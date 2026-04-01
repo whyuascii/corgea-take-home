@@ -1,7 +1,7 @@
 import pytest
 from rest_framework import status
 
-from findings.models import AuditLog, Finding, FindingComment, FindingHistory, Rule
+from findings.models import AuditLog, Finding, FindingComment, FindingHistory
 from integrations.models import IntegrationConfig, StatusMapping
 from tests.conftest import get_results
 
@@ -67,7 +67,6 @@ class TestFindings:
             f"/api/projects/{project.slug}/findings/trends/"
         )
         assert resp.status_code == status.HTTP_200_OK
-        data = resp.json()
 
         results = get_results(resp)
         assert len(results) > 0

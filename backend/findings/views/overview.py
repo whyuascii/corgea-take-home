@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from core.cache import cached_view
 from core.constants import CACHE_TTL_OVERVIEW, OVERVIEW_BREAKDOWN_LIMIT, OVERVIEW_RULES_LIMIT
 from core.pagination import paginate_list, paginate_queryset
-from projects.membership import ProjectMembership
 from projects.models import Project
 from ..models import Finding, Rule
 from ..serializers import OverviewFindingSerializer

@@ -7,8 +7,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 
 django_asgi_app = get_asgi_application()
 
-from core.auth import TokenAuthMiddleware
-from core.routing import websocket_urlpatterns
+from core.auth import TokenAuthMiddleware  # noqa: E402
+from core.routing import websocket_urlpatterns  # noqa: E402
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,

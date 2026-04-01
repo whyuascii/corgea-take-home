@@ -2,12 +2,12 @@ import os
 
 from django.core.exceptions import ImproperlyConfigured
 
-from .base import *
+from .base import *  # noqa: F403
 
 DEBUG = False
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
-if FIELD_ENCRYPTION_KEY in ("dev-encryption-key-do-not-use-in-production", ""):
+if FIELD_ENCRYPTION_KEY in ("dev-encryption-key-do-not-use-in-production", ""):  # noqa: F405
     raise ImproperlyConfigured(
         "FIELD_ENCRYPTION_KEY must be set to a strong, unique value in production."
     )

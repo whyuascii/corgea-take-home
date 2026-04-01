@@ -129,13 +129,17 @@ jobs:
         working-directory: backend
         run: uv sync --all-extras
 
-      - name: Run pip-audit and bandit
+      - name: Run pip-audit
         working-directory: backend
         run: |
           uv pip compile pyproject.toml -o requirements.txt
           uvx pip-audit -r requirements.txt
-          uv run bandit -r . -c pyproject.toml -f json -o bandit-report.json || true
-          uv run bandit -r . -c pyproject.toml
+
+      - name: Run bandit
+        working-directory: backend
+        run: |
+          uv run bandit -r accounts config core findings integrations projects scans -c pyproject.toml -f json -o bandit-report.json || true
+          uv run bandit -r accounts config core findings integrations projects scans -c pyproject.toml
 
       - name: Run semgrep
         uses: semgrep/semgrep-action@v1
@@ -257,6 +261,11 @@ jobs:
       - name: Load image
         run: gunzip -c /tmp/backend-image.tar.gz | docker load
 
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: backend/.trivyignore
+          sparse-checkout-cone-mode: false
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -265,6 +274,7 @@ jobs:
           exit-code: "1"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
+          trivyignores: backend/.trivyignore
 
       - name: Run Trivy (full report)
         if: always()

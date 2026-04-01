@@ -8,11 +8,18 @@ services:
       - "5433:5432"
     security_opt:
       - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vulntracker"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
 
   backend:
     build: ./backend
@@ -27,7 +34,40 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
     command: ["sh", "/app/entrypoint.sh"]
+
+  qcluster:
+    build: ./backend
+    volumes:
+      - ./backend:/app
+      - backend_venv:/app/.venv
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    command: ["sh", "-c", "uv run python manage.py qcluster"]
 
   frontend:
     build: ./frontend
@@ -40,6 +80,19 @@ services:
       - backend
     security_opt:
       - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
 
 volumes:
   postgres_data:

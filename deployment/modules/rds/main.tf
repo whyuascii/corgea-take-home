@@ -96,6 +96,8 @@ resource "aws_db_instance" "primary" {
   performance_insights_kms_key_id = var.kms_key_arn != "" ? var.kms_key_arn : null
   monitoring_interval             = var.environment == "prod" ? 60 : 0
 
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
   auto_minor_version_upgrade = true
   copy_tags_to_snapshot      = true
 
@@ -127,6 +129,8 @@ resource "aws_db_instance" "replica" {
 
   deletion_protection = var.deletion_protection
   skip_final_snapshot = true
+
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
   performance_insights_enabled = var.performance_insights_enabled
   monitoring_interval          = var.environment == "prod" ? 60 : 0

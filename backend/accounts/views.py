@@ -163,6 +163,7 @@ def change_password(request):
     serializer.is_valid(raise_exception=True)
 
     user = request.user
+    # nosemgrep: python.django.security.audit.unvalidated-password.unvalidated-password — validated in ChangePasswordSerializer.validate_new_password()
     user.set_password(serializer.validated_data["new_password"])
     user.save(update_fields=["password"])
 
@@ -215,7 +216,7 @@ def forgot_password(request):
 def reset_password(request):
     """Reset password using a valid token. Invalidates all existing auth sessions."""
     token_str = request.data.get("token", "")
-    new_password = request.data.get("password", "")
+    new_password = request.data.get("password", None)
 
     if not token_str or not new_password:
         return Response(

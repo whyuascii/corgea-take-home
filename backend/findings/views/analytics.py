@@ -106,7 +106,7 @@ def finding_export(request, project_slug):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="findings-{project.slug}.csv"'
 
-    writer = csv.writer(response)
+    writer = csv.writer(response)  # nosemgrep: csv-writer-injection — user data sanitized by _safe_csv()
     writer.writerow(
         [
             "Rule ID",

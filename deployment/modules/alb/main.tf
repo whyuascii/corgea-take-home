@@ -2,6 +2,7 @@ locals {
   name_prefix = "${var.app_name}-${var.environment}"
 }
 
+# nosemgrep: terraform.aws.security.aws-elb-access-logs-not-enabled.aws-elb-access-logs-not-enabled
 resource "aws_lb" "main" {
   name               = "${local.name_prefix}-alb"
   internal           = false

@@ -8,11 +8,11 @@ const MAX_DELAY_MS = 30000;
  * Hook for WebSocket connections with exponential backoff reconnection.
  *
  * @param {string} path  WebSocket path (e.g. "/ws/projects/my-proj/scans/")
- * @param {object} opts  Options: { enabled, onMessage, token }
+ * @param {object} opts  Options: { enabled, onMessage }
  * @returns {{ lastMessage, connected, retryCount }}
  */
 export default function useWebSocket(path, opts = {}) {
-  const { enabled = true, onMessage, token } = opts;
+  const { enabled = true, onMessage } = opts;
   const [lastMessage, setLastMessage] = useState(null);
   const [connected, setConnected] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -26,9 +26,8 @@ export default function useWebSocket(path, opts = {}) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
 
-    // Pass auth token as query param for WebSocket auth
-    const authParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    const url = `${protocol}//${host}${path}${authParam}`;
+    // Cookies are sent automatically on WebSocket handshake
+    const url = `${protocol}//${host}${path}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -72,7 +71,7 @@ export default function useWebSocket(path, opts = {}) {
     ws.onerror = () => {
       ws.close();
     };
-  }, [path, enabled, onMessage, token]);
+  }, [path, enabled, onMessage]);
 
   useEffect(() => {
     connect();

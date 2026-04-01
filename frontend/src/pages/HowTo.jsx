@@ -274,7 +274,7 @@ function CICDIntegrationTab() {
             <tbody className="text-gray-300">
               <tr className="border-b border-gray-800/50">
                 <td className="py-2 pr-4 font-mono text-xs text-indigo-400">VULNTRACKER_URL</td>
-                <td className="py-2 pr-4 font-mono text-xs text-gray-500">https://vulntracker.example.com</td>
+                <td className="py-2 pr-4 font-mono text-xs text-gray-500">https://vulntracker.corgea.com</td>
                 <td className="py-2">Base URL of your VulnTracker instance</td>
               </tr>
               <tr className="border-b border-gray-800/50">

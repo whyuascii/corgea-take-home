@@ -156,9 +156,9 @@ export default function FindingDetail() {
               </div>
             ) : (
               <div className="space-y-1 text-sm">
-                <p><span className="text-gray-500">Jira:</span> {finding.jira_ticket_url ? <a href={finding.jira_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noreferrer">{finding.jira_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
-                <p><span className="text-gray-500">Linear:</span> {finding.linear_ticket_url ? <a href={finding.linear_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noreferrer">{finding.linear_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
-                <p><span className="text-gray-500">PR:</span> {finding.pr_url ? <a href={finding.pr_url} className="text-indigo-400 hover:underline" target="_blank" rel="noreferrer">{finding.pr_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">Jira:</span> {finding.jira_ticket_url ? <a href={finding.jira_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.jira_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">Linear:</span> {finding.linear_ticket_url ? <a href={finding.linear_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.linear_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">PR:</span> {finding.pr_url ? <a href={finding.pr_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.pr_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
               </div>
             )}
           </div>

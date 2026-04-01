@@ -57,7 +57,7 @@ export default function SecurityDetails({ metadata }) {
         <div className="mt-3">
           <span className="text-gray-500 text-xs block mb-1">References</span>
           {metadata.references.map((ref) => (
-            <a key={ref} href={ref} target="_blank" rel="noreferrer"
+            <a key={ref} href={ref} target="_blank" rel="noopener noreferrer"
               className="text-indigo-400 text-xs hover:underline block truncate">{ref}</a>
           ))}
         </div>
@@ -85,7 +85,7 @@ export default function SecurityDetails({ metadata }) {
 
       {/* Source link */}
       {metadata.source && (
-        <a href={metadata.source} target="_blank" rel="noreferrer"
+        <a href={metadata.source} target="_blank" rel="noopener noreferrer"
           className="text-indigo-400 text-xs hover:underline mt-2 inline-block">
           View rule documentation &rarr;
         </a>

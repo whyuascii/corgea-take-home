@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator'
 
 export default function Register() {
   const [username, setUsername] = useState('')
@@ -31,8 +32,11 @@ export default function Register() {
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500" />
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500" />
-          <input type="password" placeholder="Password (8+ chars)" value={password} onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500" />
+          <div>
+            <input type="password" placeholder="Password (10+ chars)" value={password} onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500" />
+            <PasswordStrengthIndicator password={password} />
+          </div>
           <button type="submit" className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Register</button>
         </form>
         <p className="text-gray-400 text-sm mt-4">

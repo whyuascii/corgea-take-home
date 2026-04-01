@@ -1,41 +1,50 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useCallback } from 'react'
 import api from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user')
-    return saved ? JSON.parse(saved) : null
-  })
-  const [token, setToken] = useState(() => localStorage.getItem('token'))
+  const [user, setUser] = useState(null)
+  const [token, setToken] = useState(() => sessionStorage.getItem('token'))
 
   const login = async (username, password) => {
     const { data } = await api.post('/auth/login/', { username, password })
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    sessionStorage.setItem('token', data.token)
     setToken(data.token)
     setUser(data.user)
   }
 
   const register = async (username, email, password) => {
     const { data } = await api.post('/auth/register/', { username, email, password })
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    sessionStorage.setItem('token', data.token)
     setToken(data.token)
     setUser(data.user)
   }
 
   const logout = async () => {
     try { await api.post('/auth/logout/') } catch {}
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
     setToken(null)
     setUser(null)
   }
 
+  const updateUser = useCallback((userData) => {
+    setUser((prev) => ({ ...prev, ...userData }))
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await api.get('/auth/me/')
+      setUser(data)
+      return data
+    } catch (err) {
+      console.error('Failed to refresh user:', err)
+      throw err
+    }
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

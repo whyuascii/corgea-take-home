@@ -4,8 +4,9 @@ import api from '../api/client'
 export default function APIKeyCard({ projectSlug }) {
   const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [showKey, setShowKey] = useState(false)
+  const [newKey, setNewKey] = useState(null)
   const [regenerating, setRegenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -21,8 +22,10 @@ export default function APIKeyCard({ projectSlug }) {
   useEffect(() => { fetchProject() }, [fetchProject])
 
   const handleCopy = () => {
-    if (project?.api_key) {
-      navigator.clipboard.writeText(project.api_key)
+    if (newKey) {
+      navigator.clipboard.writeText(newKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -32,8 +35,9 @@ export default function APIKeyCard({ projectSlug }) {
     }
     setRegenerating(true)
     try {
-      await api.post(`/projects/${projectSlug}/regenerate_api_key/`)
-      setShowKey(false)
+      const { data } = await api.post(`/projects/${projectSlug}/rotate_api_key/`)
+      setNewKey(data.api_key)
+      setCopied(false)
       await fetchProject()
     } catch (err) {
       alert('Failed to regenerate API key: ' + (err.response?.data?.detail || err.message))
@@ -51,10 +55,6 @@ export default function APIKeyCard({ projectSlug }) {
       day: 'numeric',
     })
   }
-
-  const maskedKey = project?.api_key
-    ? project.api_key.slice(0, 8) + '\u2022'.repeat(32) + project.api_key.slice(-4)
-    : ''
 
   if (loading) {
     return (
@@ -77,26 +77,35 @@ export default function APIKeyCard({ projectSlug }) {
         Use this key to push scan results from your CI/CD pipeline via the API.
       </p>
 
-      <div className="flex items-center gap-2">
-        <input
-          readOnly
-          value={showKey ? (project?.api_key || '') : maskedKey}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 font-mono"
-          onClick={(e) => e.target.select()}
-        />
-        <button
-          onClick={() => setShowKey((v) => !v)}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded"
-        >
-          {showKey ? 'Hide' : 'Show'}
-        </button>
-        <button
-          onClick={handleCopy}
-          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded"
-        >
-          Copy
-        </button>
-      </div>
+      {newKey ? (
+        <div className="mb-3">
+          <p className="text-sm text-yellow-400 mb-2">
+            Copy your new API key now. It will not be shown again.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={newKey}
+              className="flex-1 bg-gray-800 border border-yellow-600 rounded px-3 py-2 text-sm text-gray-300 font-mono"
+              onClick={(e) => e.target.select()}
+            />
+            <button
+              onClick={handleCopy}
+              className="px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm rounded"
+            >
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mb-3">
+          <input
+            readOnly
+            value={project?.api_key_hint || '••••••••'}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 font-mono"
+          />
+        </div>
+      )}
 
       <div className="mt-4">
         <button

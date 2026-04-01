@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
@@ -8,6 +8,8 @@ export default function Login() {
   const [error, setError] = useState('')
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const successMessage = location.state?.message || ''
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -24,6 +26,11 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="bg-gray-900 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-800">
         <h1 className="text-2xl font-bold text-white mb-6">VulnTracker</h1>
+        {successMessage && (
+          <div className="mb-4 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
+            {successMessage}
+          </div>
+        )}
         {error && <p className="text-red-400 mb-4 text-sm">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
@@ -42,6 +49,9 @@ export default function Login() {
         </form>
         <p className="text-gray-400 text-sm mt-4">
           No account? <Link to="/register" className="text-indigo-400 hover:underline">Register</Link>
+        </p>
+        <p className="text-gray-400 text-sm mt-2">
+          <Link to="/forgot-password" className="text-indigo-400 hover:underline">Forgot your password?</Link>
         </p>
       </div>
     </div>

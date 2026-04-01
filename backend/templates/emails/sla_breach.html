@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1f2937;">
+  <h2 style="color: #dc2626;">SLA Breach Alert — {{ project.name }}</h2>
+  <p><strong>{{ findings|length }}</strong> finding{{ findings|length|pluralize }} {{ findings|length|pluralize:"has,have" }} exceeded {{ findings|length|pluralize:"its,their" }} SLA deadline in <strong>{{ project.name }}</strong>.</p>
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <tr style="background: #f3f4f6;">
+      <th style="padding: 8px 12px; text-align: left;">Rule</th>
+      <th style="padding: 8px 12px; text-align: left;">File</th>
+      <th style="padding: 8px 12px; text-align: left;">Severity</th>
+    </tr>
+    {% for f in findings %}
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 8px 12px; font-size: 13px;">{{ f.rule.semgrep_rule_id|truncatechars:40 }}</td>
+      <td style="padding: 8px 12px; font-size: 13px;">{{ f.file_path|truncatechars:40 }}:{{ f.line_start }}</td>
+      <td style="padding: 8px 12px; font-size: 13px; font-weight: 600;">{{ f.rule.severity }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p style="text-align: center; margin: 30px 0;">
+    <a href="{{ dashboard_url }}" style="background: #dc2626; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">View Compliance Dashboard</a>
+  </p>
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+  <p style="color: #9ca3af; font-size: 12px;">VulnTracker — Security Vulnerability Tracking</p>
+</body>
+</html>

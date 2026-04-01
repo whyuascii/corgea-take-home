@@ -16,8 +16,10 @@ from projects.membership import ProjectMembership
 from ..models import Finding, FindingHistory
 from ..serializers import FindingSerializer
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["GET"])
 def finding_trends(request, project_slug):
     """Return daily new and resolved finding counts over a configurable time window (default 30 days)."""
@@ -72,6 +74,7 @@ def finding_trends(request, project_slug):
     return Response(result)
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["GET"])
 @throttle_classes([ExportThrottle])
 def finding_export(request, project_slug):
@@ -139,6 +142,7 @@ def finding_export(request, project_slug):
     return response
 
 
+@extend_schema(tags=["Findings"], responses=FindingSerializer)
 @api_view(["GET"])
 def finding_search(request, project_slug):
     """Search findings by file path, rule ID, or code snippet. Requires a query of at least 2 characters."""

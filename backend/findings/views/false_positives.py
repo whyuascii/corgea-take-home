@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from core.constants import MAX_REASON_LENGTH
 from projects.membership import ProjectMembership
 from core.audit import log_audit
@@ -11,6 +13,7 @@ from ..models import AuditLog, Finding, FindingHistory
 from projects.permissions import get_project_for_user
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["POST"])
 def mark_false_positive(request, project_slug, finding_id):
     """Mark or unmark a finding as a false positive, optionally applying across all projects for the same rule."""

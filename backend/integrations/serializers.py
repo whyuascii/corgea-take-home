@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import IntegrationConfig, StatusMapping
@@ -38,12 +39,15 @@ class IntegrationConfigSerializer(serializers.ModelSerializer):
             "linear_api_key": {"write_only": True, "required": False},
         }
 
+    @extend_schema_field(serializers.BooleanField())
     def get_jira_api_token_set(self, obj):
         return bool(obj.jira_api_token)
 
+    @extend_schema_field(serializers.BooleanField())
     def get_linear_api_key_set(self, obj):
         return bool(obj.linear_api_key)
 
+    @extend_schema_field(serializers.CharField())
     def get_webhook_url(self, obj):
         """Return the webhook path with a masked secret for display only."""
         if obj.webhook_secret:

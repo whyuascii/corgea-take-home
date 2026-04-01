@@ -5,6 +5,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from core.audit import log_audit
 from core.constants import BULK_OPERATION_LIMIT, VALID_BULK_ACTIONS
 from core.throttles import BulkOperationThrottle
@@ -13,6 +15,7 @@ from ..models import AuditLog, Finding, FindingHistory
 from projects.permissions import get_project_for_user
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["POST"])
 @throttle_classes([BulkOperationThrottle])
 def bulk_update_findings(request, project_slug):

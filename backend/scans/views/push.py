@@ -18,6 +18,7 @@ from findings.models import AuditLog
 from projects.models import Project
 from ..models import Scan
 from ..serializers import ScanPushSerializer, ScanSerializer
+from drf_spectacular.utils import extend_schema
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ def _ingest_scan(scan):
     )
 
 
+@extend_schema(tags=["Scans"], request=ScanPushSerializer, responses=ScanSerializer)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def scan_push(request, project_slug):

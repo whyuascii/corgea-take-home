@@ -3,6 +3,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from core.audit import log_audit
 from core.pagination import paginate_queryset
 from projects.membership import ProjectMembership
@@ -11,6 +13,7 @@ from ..serializers import FindingCommentSerializer
 from projects.permissions import get_project_for_user
 
 
+@extend_schema(tags=["Findings"], responses=FindingCommentSerializer)
 @api_view(["GET", "POST"])
 def finding_comments(request, project_slug, finding_id):
     """List or create comments on a finding. POST requires a 'text' field."""
@@ -32,6 +35,7 @@ def finding_comments(request, project_slug, finding_id):
     return paginate_queryset(comments, request, FindingCommentSerializer, page_size=50)
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["DELETE"])
 def finding_comment_delete(request, project_slug, finding_id, comment_id):
     """Delete a comment. Only the comment author may delete their own comments."""

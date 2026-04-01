@@ -190,7 +190,16 @@ SPECTACULAR_SETTINGS = {
     ],
     "SERVE_INCLUDE_SCHEMA": False,
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    "ENUM_NAME_OVERRIDES": {
+        "FindingStatusEnum": "findings.models.Finding.Status",
+        "RuleStatusEnum": "findings.models.Rule.Status",
+    },
 }
+
+# Silence drf_spectacular system check warnings — views use @extend_schema
+# for schema generation, but the system check still reports spurious W002
+# for function-based multi-method views. This is a known spectacular limitation.
+SILENCED_SYSTEM_CHECKS = ["drf_spectacular.W001", "drf_spectacular.W002"]
 
 ASGI_APPLICATION = "config.asgi.application"
 # Dev-only default; overridden by production.py with Redis for cross-process messaging.

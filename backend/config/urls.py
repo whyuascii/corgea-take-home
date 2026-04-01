@@ -1,5 +1,6 @@
 from django.db import DatabaseError, connection
 from django.urls import include, path
+from drf_spectacular.utils import extend_schema
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -10,6 +11,7 @@ from findings import views as findings_views
 from integrations import views as webhook_views
 
 
+@extend_schema(exclude=True)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request):

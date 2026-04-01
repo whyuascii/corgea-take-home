@@ -17,8 +17,10 @@ from ..serializers import (
     FindingSerializer,
 )
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Findings"], operation_id="findings_list", responses=FindingSerializer)
 @api_view(["GET"])
 def finding_list(request, project_slug):
     """List findings for a project, with optional filters for status, severity, rule, scan, and false positive state."""
@@ -77,6 +79,7 @@ def finding_list(request, project_slug):
     return paginate_queryset(findings, request, FindingSerializer)
 
 
+@extend_schema(tags=["Findings"], responses=FindingDetailSerializer)
 @api_view(["GET", "PATCH"])
 def finding_detail(request, project_slug, finding_id):
     """Retrieve or update a single finding. PATCH accepts status and ticket URL fields."""
@@ -138,6 +141,7 @@ def finding_detail(request, project_slug, finding_id):
     return Response(serializer.data)
 
 
+@extend_schema(tags=["Findings"], responses=FindingHistorySerializer)
 @api_view(["GET"])
 def finding_history(request, project_slug, finding_id):
     """Return the status-change history for a single finding, ordered by most recent first."""

@@ -10,8 +10,10 @@ from projects.membership import ProjectMembership
 from ..models import IntegrationConfig
 from ..serializers import IntegrationConfigSerializer
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Integrations"], operation_id="integrations_list", responses=IntegrationConfigSerializer)
 @api_view(["GET", "POST"])
 def integration_list(request, project_slug):
     """List all integrations for a project, or create a new integration configuration."""
@@ -33,6 +35,7 @@ def integration_list(request, project_slug):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(tags=["Integrations"], responses=IntegrationConfigSerializer)
 @api_view(["GET", "PATCH", "DELETE"])
 def integration_detail(request, project_slug, integration_id):
     """Retrieve, update, or delete a specific integration configuration."""
@@ -62,6 +65,7 @@ def integration_detail(request, project_slug, integration_id):
     return Response(serializer.data)
 
 
+@extend_schema(tags=["Integrations"])
 @api_view(["POST"])
 @throttle_classes([IntegrationTestThrottle])
 def integration_test(request, project_slug, integration_id):

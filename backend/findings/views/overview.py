@@ -9,6 +9,7 @@ from core.pagination import paginate_list, paginate_queryset
 from projects.models import Project
 from ..models import Finding, Rule
 from ..serializers import OverviewFindingSerializer
+from drf_spectacular.utils import extend_schema
 
 
 def _user_project_ids(user):
@@ -18,6 +19,7 @@ def _user_project_ids(user):
     ).values_list("id", flat=True).distinct()
 
 
+@extend_schema(tags=["Overview"])
 @api_view(["GET"])
 def overview_rules(request):
     """List rules across all of the authenticated user's projects.
@@ -83,6 +85,7 @@ def overview_rules(request):
     return paginate_list(result, request)
 
 
+@extend_schema(tags=["Overview"], responses=OverviewFindingSerializer)
 @api_view(["GET"])
 def overview_findings(request):
     """List findings across all of the authenticated user's projects, with optional filters for project, status, severity, and rule."""
@@ -123,6 +126,7 @@ def overview_findings(request):
     return paginate_queryset(findings, request, OverviewFindingSerializer)
 
 
+@extend_schema(tags=["Overview"])
 @api_view(["GET"])
 @cached_view("overview_summary", timeout=CACHE_TTL_OVERVIEW)
 def overview_summary(request):

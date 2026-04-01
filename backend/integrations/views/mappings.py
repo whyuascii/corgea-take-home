@@ -9,8 +9,10 @@ from projects.membership import ProjectMembership
 from ..models import IntegrationConfig, StatusMapping
 from ..serializers import StatusMappingSerializer
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Integrations"], responses=StatusMappingSerializer)
 @api_view(["GET", "POST"])
 def mapping_list(request, project_slug, integration_id):
     """List or create status mappings between external service statuses and internal finding statuses."""
@@ -33,6 +35,7 @@ def mapping_list(request, project_slug, integration_id):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(tags=["Integrations"], responses=StatusMappingSerializer)
 @api_view(["PATCH", "DELETE"])
 def mapping_detail(request, project_slug, integration_id, mapping_id):
     """Update or delete a specific status mapping."""

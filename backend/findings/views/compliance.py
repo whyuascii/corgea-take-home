@@ -8,6 +8,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from core.pagination import paginate_queryset
 from findings.models import Finding, FindingHistory, SLAPolicy
 from findings.serializers import FindingSerializer, SLAPolicySerializer
@@ -16,6 +18,7 @@ from core.constants import DB_ITERATOR_CHUNK_SIZE, TOP_OWASP_LIMIT
 from projects.permissions import get_project_for_user
 
 
+@extend_schema(tags=["Compliance"])
 @api_view(["GET"])
 def compliance_dashboard(request, project_slug):
     """Return MTTR by severity, SLA compliance %, age distribution."""
@@ -91,6 +94,7 @@ def compliance_dashboard(request, project_slug):
     })
 
 
+@extend_schema(tags=["Compliance"], responses=FindingSerializer)
 @api_view(["GET"])
 def sla_breaches(request, project_slug):
     """List findings that have breached their SLA deadline."""
@@ -106,6 +110,7 @@ def sla_breaches(request, project_slug):
     return paginate_queryset(breached, request, FindingSerializer)
 
 
+@extend_schema(tags=["Compliance"], responses=SLAPolicySerializer)
 @api_view(["GET", "POST"])
 def sla_policies(request, project_slug):
     """List or create SLA policies for a project."""
@@ -131,6 +136,7 @@ def sla_policies(request, project_slug):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(tags=["Compliance"], responses=SLAPolicySerializer)
 @api_view(["PATCH", "DELETE"])
 def sla_policy_detail(request, project_slug, policy_id):
     """Update or delete an SLA policy."""

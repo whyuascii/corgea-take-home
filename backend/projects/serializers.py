@@ -1,6 +1,8 @@
 from django.db.models import Count, Q
 from rest_framework import serializers
 
+from drf_spectacular.utils import extend_schema_field
+
 from .membership import ProjectMembership
 from .models import Project
 
@@ -20,6 +22,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at", "last_used_at"]
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_api_key_hint(self, obj):
         """Return a masked preview of the API key for privileged users only."""
         request = self.context.get("request")
@@ -38,6 +41,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             return f"{key[:4]}...{key[-4:]}"
         return "****"
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_user_role(self, obj):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
@@ -47,6 +51,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         ).first()
         return membership.role if membership else None
 
+    @extend_schema_field(serializers.DictField(allow_null=True))
     def get_findings_summary(self, obj):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:

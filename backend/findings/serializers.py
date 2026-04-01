@@ -1,4 +1,5 @@
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from core.constants import MAX_COMMENT_LENGTH
@@ -19,6 +20,7 @@ class RuleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "semgrep_rule_id", "severity", "message", "created_at"]
 
+    @extend_schema_field(serializers.IntegerField())
     def get_active_finding_count(self, obj):
         """Count of findings that are not ignored and not marked as false positive."""
         return obj.findings.exclude(
@@ -27,6 +29,7 @@ class RuleSerializer(serializers.ModelSerializer):
             is_false_positive=True
         ).count()
 
+    @extend_schema_field(serializers.IntegerField())
     def get_total_finding_count(self, obj):
         """Count of all findings for this rule, regardless of status."""
         return obj.findings.count()
@@ -73,9 +76,11 @@ class FindingSerializer(serializers.ModelSerializer):
             "sla_deadline", "sla_breached",
         ]
 
+    @extend_schema_field(serializers.CharField())
     def get_effective_severity(self, obj):
         return obj.severity_override or obj.rule.severity
 
+    @extend_schema_field(serializers.FloatField(allow_null=True))
     def get_sla_hours_remaining(self, obj):
         if not obj.sla_deadline:
             return None

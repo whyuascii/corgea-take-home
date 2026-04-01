@@ -8,8 +8,10 @@ from projects.membership import ProjectMembership
 from ..models import Scan
 from ..serializers import ScanSerializer
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Scans"], operation_id="scans_list", responses=ScanSerializer)
 @api_view(["GET"])
 def scan_list(request, project_slug):
     """List all scans for a project, ordered by most recent first."""
@@ -23,6 +25,7 @@ def scan_list(request, project_slug):
     return paginate_queryset(scans, request, ScanSerializer)
 
 
+@extend_schema(tags=["Scans"], responses=ScanSerializer)
 @api_view(["GET"])
 def scan_detail(request, project_slug, scan_id):
     """Retrieve details of a single scan by ID."""
@@ -32,6 +35,7 @@ def scan_detail(request, project_slug, scan_id):
     return Response(serializer.data)
 
 
+@extend_schema(tags=["Scans"], responses=ScanSerializer)
 @api_view(["GET"])
 def scan_latest(request, project_slug):
     """Retrieve the most recent scan for a project, or 404 if no scans exist."""

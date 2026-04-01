@@ -10,8 +10,10 @@ from scans.models import Scan
 from ..models import AuditLog, Finding, FindingHistory, Rule
 from ..serializers import RuleSerializer
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Rules"], responses=RuleSerializer)
 @api_view(["GET"])
 def rule_list(request, project_slug):
     """List all rules for a project, with optional filtering by status (active/ignored)."""
@@ -28,6 +30,7 @@ def rule_list(request, project_slug):
     return paginate_queryset(rules, request, RuleSerializer)
 
 
+@extend_schema(tags=["Rules"], request=RuleSerializer, responses=RuleSerializer)
 @api_view(["PATCH"])
 def rule_update(request, project_slug, rule_id):
     """Update a rule's status (active or ignored). Ignoring a rule also ignores all its findings."""

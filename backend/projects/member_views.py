@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from drf_spectacular.utils import extend_schema
+
 from core.audit import log_audit
 from findings.models import AuditLog
 
@@ -14,6 +16,7 @@ from .permissions import get_project_for_user
 User = get_user_model()
 
 
+@extend_schema(tags=["Projects"], responses=ProjectMembershipSerializer)
 @api_view(["GET", "POST"])
 def member_list(request, slug):
     """List project members or add a new member (owner-only for POST)."""
@@ -71,6 +74,7 @@ def member_list(request, slug):
     )
 
 
+@extend_schema(tags=["Projects"], responses=ProjectMembershipSerializer)
 @api_view(["PATCH", "DELETE"])
 def member_detail(request, slug, membership_id):
     """Update a member's role or remove a member (owner-only)."""

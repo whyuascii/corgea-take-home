@@ -8,8 +8,10 @@ from projects.membership import ProjectMembership
 from scans.models import Scan
 from ..models import Finding, Rule
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Findings"])
 @api_view(["GET"])
 @cached_view("project_summary", timeout=CACHE_TTL_PROJECT)
 def project_summary(request, project_slug):

@@ -9,6 +9,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from core.throttles import WebhookThrottle
+from drf_spectacular.utils import extend_schema
 
 from findings.models import Finding, FindingHistory
 
@@ -23,6 +24,7 @@ def _verify_hmac(secret, body, provided_signature):
     return hmac.compare_digest(expected, provided_signature)
 
 
+@extend_schema(tags=["Integrations"])
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([WebhookThrottle])
@@ -58,6 +60,7 @@ def jira_webhook(request, webhook_secret):
     return Response({"ok": True})
 
 
+@extend_schema(tags=["Integrations"])
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([WebhookThrottle])

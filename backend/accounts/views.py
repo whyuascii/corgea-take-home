@@ -22,6 +22,7 @@ from .serializers import (
     UserSerializer,
 )
 from core.throttles import LoginThrottle, PasswordResetThrottle, RegistrationThrottle
+from drf_spectacular.utils import extend_schema
 
 User = get_user_model()
 
@@ -49,6 +50,7 @@ def _is_locked_out(ip, username=None):
     return False
 
 
+@extend_schema(tags=["Auth"], request=RegisterSerializer, responses=UserSerializer)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([RegistrationThrottle])
@@ -68,6 +70,7 @@ def register(request):
     )
 
 
+@extend_schema(tags=["Auth"], request=LoginSerializer, responses=UserSerializer)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([LoginThrottle])
@@ -108,6 +111,7 @@ def login(request):
     return Response({"user": UserSerializer(user).data, "token": token.key})
 
 
+@extend_schema(tags=["Auth"])
 @api_view(["POST"])
 def logout(request):
     """Invalidate the current authentication token."""
@@ -119,6 +123,7 @@ def logout(request):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@extend_schema(tags=["Auth"], responses=UserSerializer)
 @api_view(["GET", "PATCH"])
 def me(request):
     """Return or update the profile of the currently authenticated user."""
@@ -154,6 +159,7 @@ def me(request):
     return Response(UserSerializer(user).data)
 
 
+@extend_schema(tags=["Auth"], request=ChangePasswordSerializer)
 @api_view(["POST"])
 def change_password(request):
     """Change the authenticated user's password. Invalidates other tokens."""
@@ -177,6 +183,7 @@ def change_password(request):
     return Response({"message": "Password changed successfully."})
 
 
+@extend_schema(tags=["Auth"])
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([PasswordResetThrottle])
@@ -210,6 +217,7 @@ def forgot_password(request):
     return Response({"message": "If an account with that email exists, a reset link has been sent."})
 
 
+@extend_schema(tags=["Auth"])
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([PasswordResetThrottle])

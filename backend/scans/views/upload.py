@@ -11,8 +11,10 @@ from ..models import Scan
 from ..serializers import ScanSerializer, ScanUploadSerializer
 from ..ingestion import ingest_scan
 from projects.permissions import get_project_for_user
+from drf_spectacular.utils import extend_schema
 
 
+@extend_schema(tags=["Scans"], request=ScanUploadSerializer, responses=ScanSerializer)
 @api_view(["POST"])
 @throttle_classes([ScanUploadThrottle])
 def scan_upload(request, project_slug):

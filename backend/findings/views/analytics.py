@@ -1,4 +1,4 @@
-import csv
+import defusedcsv
 from datetime import timedelta
 
 from django.db.models import Count, Q
@@ -16,19 +16,6 @@ from projects.membership import ProjectMembership
 from ..models import Finding, FindingHistory
 from ..serializers import FindingSerializer
 from projects.permissions import get_project_for_user
-
-# Characters that trigger formula execution when the CSV is opened in Excel / Sheets.
-_CSV_FORMULA_CHARS = frozenset("=+-@\t\r")
-
-
-def _safe_csv(value):
-    """Prefix string cell values that start with a formula trigger character.
-    Also handles values with leading whitespace before trigger characters."""
-    if isinstance(value, str) and value:
-        stripped = value.lstrip()
-        if stripped and stripped[0] in _CSV_FORMULA_CHARS:
-            return f"'{value}"
-    return value
 
 
 @api_view(["GET"])
@@ -106,7 +93,7 @@ def finding_export(request, project_slug):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="findings-{project.slug}.csv"'
 
-    writer = csv.writer(response)  # nosemgrep: csv-writer-injection — user data sanitized by _safe_csv()
+    writer = defusedcsv.writer(response)
     writer.writerow(
         [
             "Rule ID",
@@ -125,14 +112,14 @@ def finding_export(request, project_slug):
     for f in findings.iterator(chunk_size=DB_ITERATOR_CHUNK_SIZE):
         writer.writerow(
             [
-                _safe_csv(f.rule.semgrep_rule_id),
+                f.rule.semgrep_rule_id,
                 f.rule.severity,
-                _safe_csv(f.file_path),
+                f.file_path,
                 f.line_start,
                 f.line_end,
                 f.status,
                 f.is_false_positive,
-                _safe_csv(f.false_positive_reason),
+                f.false_positive_reason,
                 f.created_at.isoformat(),
                 f.updated_at.isoformat(),
             ]

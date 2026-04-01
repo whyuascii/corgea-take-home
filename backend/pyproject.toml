@@ -16,6 +16,7 @@ dependencies = [
     "channels>=4.1",
     "daphne>=4.1",
     "argon2-cffi>=25.1.0",
+    "defusedcsv>=3.0.0",
 ]
 
 [project.optional-dependencies]

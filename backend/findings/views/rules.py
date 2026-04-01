@@ -19,6 +19,11 @@ def rule_list(request, project_slug):
     rules = Rule.objects.filter(project=project)
     rule_status = request.query_params.get("status")
     if rule_status:
+        if rule_status not in [Rule.Status.ACTIVE, Rule.Status.IGNORED]:
+            return Response(
+                {"error": "Invalid status. Must be 'active' or 'ignored'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         rules = rules.filter(status=rule_status)
     return paginate_queryset(rules, request, RuleSerializer)
 

@@ -1,6 +1,8 @@
 import logging
 
 import requests
+from django.db import transaction
+from findings.models import Finding
 from findings.models.history import FindingHistory
 
 from .models import IntegrationConfig
@@ -93,23 +95,26 @@ def create_tickets_for_finding(finding):
 def _create_jira_ticket(config, finding):
     from .jira_client import create_jira_issue, get_jira_issue_status
 
-    # If a Jira ticket already exists, only skip if it is NOT done.
-    if finding.jira_ticket_id:
-        status = get_jira_issue_status(config, finding.jira_ticket_id)
-        if status != "done":
-            # Ticket is still active (or status unknown) — skip creation.
-            logger.debug(
-                "Skipping Jira ticket creation for finding %s — "
-                "existing ticket %s has status %r",
-                finding.id, finding.jira_ticket_id, status,
-            )
-            return
+    with transaction.atomic():
+        # Re-fetch with row lock to prevent duplicate ticket creation
+        finding = Finding.objects.select_for_update().get(pk=finding.pk)
 
-    issue_key, issue_url = create_jira_issue(config, finding)
-    finding.jira_ticket_id = issue_key
-    finding.jira_ticket_url = issue_url
-    finding.save(update_fields=["jira_ticket_id", "jira_ticket_url", "updated_at"])
-    logger.info("Created Jira ticket %s for finding %s", issue_key, finding.id)
+        # If a Jira ticket already exists, only skip if it is NOT done.
+        if finding.jira_ticket_id:
+            status = get_jira_issue_status(config, finding.jira_ticket_id)
+            if status != "done":
+                logger.debug(
+                    "Skipping Jira ticket creation for finding %s — "
+                    "existing ticket %s has status %r",
+                    finding.id, finding.jira_ticket_id, status,
+                )
+                return
+
+        issue_key, issue_url = create_jira_issue(config, finding)
+        finding.jira_ticket_id = issue_key
+        finding.jira_ticket_url = issue_url
+        finding.save(update_fields=["jira_ticket_id", "jira_ticket_url", "updated_at"])
+        logger.info("Created Jira ticket %s for finding %s", issue_key, finding.id)
 
     FindingHistory.objects.create(
         finding=finding,
@@ -124,23 +129,26 @@ def _create_jira_ticket(config, finding):
 def _create_linear_ticket(config, finding):
     from .linear_client import create_linear_issue, get_linear_issue_status
 
-    # If a Linear ticket already exists, only skip if it is NOT completed/cancelled.
-    if finding.linear_ticket_id:
-        status = get_linear_issue_status(config, finding.linear_ticket_id)
-        if status not in ("completed", "cancelled"):
-            # Ticket is still active (or status unknown) — skip creation.
-            logger.debug(
-                "Skipping Linear ticket creation for finding %s — "
-                "existing ticket %s has status %r",
-                finding.id, finding.linear_ticket_id, status,
-            )
-            return
+    with transaction.atomic():
+        # Re-fetch with row lock to prevent duplicate ticket creation
+        finding = Finding.objects.select_for_update().get(pk=finding.pk)
 
-    issue_id, issue_url = create_linear_issue(config, finding)
-    finding.linear_ticket_id = issue_id
-    finding.linear_ticket_url = issue_url
-    finding.save(update_fields=["linear_ticket_id", "linear_ticket_url", "updated_at"])
-    logger.info("Created Linear ticket %s for finding %s", issue_id, finding.id)
+        # If a Linear ticket already exists, only skip if it is NOT completed/cancelled.
+        if finding.linear_ticket_id:
+            status = get_linear_issue_status(config, finding.linear_ticket_id)
+            if status not in ("completed", "cancelled"):
+                logger.debug(
+                    "Skipping Linear ticket creation for finding %s — "
+                    "existing ticket %s has status %r",
+                    finding.id, finding.linear_ticket_id, status,
+                )
+                return
+
+        issue_id, issue_url = create_linear_issue(config, finding)
+        finding.linear_ticket_id = issue_id
+        finding.linear_ticket_url = issue_url
+        finding.save(update_fields=["linear_ticket_id", "linear_ticket_url", "updated_at"])
+        logger.info("Created Linear ticket %s for finding %s", issue_id, finding.id)
 
     FindingHistory.objects.create(
         finding=finding,

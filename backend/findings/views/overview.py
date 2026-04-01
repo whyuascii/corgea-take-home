@@ -1,9 +1,10 @@
 from django.db.models import Count, F, Q
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from core.cache import cached_view
-from core.constants import CACHE_TTL_OVERVIEW, OVERVIEW_BREAKDOWN_LIMIT, OVERVIEW_RULES_LIMIT
+from core.constants import CACHE_TTL_OVERVIEW, OVERVIEW_BREAKDOWN_LIMIT, OVERVIEW_RULES_LIMIT, VALID_SEVERITIES
 from core.pagination import paginate_list, paginate_queryset
 from projects.models import Project
 from ..models import Finding, Rule
@@ -26,6 +27,12 @@ def overview_rules(request):
 
     rules_qs = Rule.objects.filter(project_id__in=project_ids)
     if severity:
+        severity = severity.upper()
+        if severity not in VALID_SEVERITIES:
+            return Response(
+                {"error": f"Invalid severity. Must be one of: {', '.join(sorted(VALID_SEVERITIES))}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         rules_qs = rules_qs.filter(severity=severity)
 
     # Aggregated rule-level data
@@ -91,9 +98,20 @@ def overview_findings(request):
         findings = findings.filter(project__slug=project_slug)
     finding_status = request.query_params.get("status")
     if finding_status:
+        if finding_status not in Finding.Status.values:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {', '.join(Finding.Status.values)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(status=finding_status)
     severity = request.query_params.get("severity")
     if severity:
+        severity = severity.upper()
+        if severity not in VALID_SEVERITIES:
+            return Response(
+                {"error": f"Invalid severity. Must be one of: {', '.join(sorted(VALID_SEVERITIES))}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(rule__severity=severity)
     is_fp = request.query_params.get("is_false_positive")
     if is_fp is not None:

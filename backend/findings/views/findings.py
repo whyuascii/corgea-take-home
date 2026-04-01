@@ -1,10 +1,12 @@
+import uuid
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status as http_status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from core.constants import MAX_NOTES_LENGTH
+from core.constants import MAX_NOTES_LENGTH, VALID_SEVERITIES
 from core.pagination import paginate_queryset
 from projects.membership import ProjectMembership
 from core.audit import log_audit
@@ -29,12 +31,30 @@ def finding_list(request, project_slug):
 
     finding_status = request.query_params.get("status")
     if finding_status:
+        if finding_status not in Finding.Status.values:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {', '.join(Finding.Status.values)}"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(status=finding_status)
     severity = request.query_params.get("severity")
     if severity:
+        severity = severity.upper()
+        if severity not in VALID_SEVERITIES:
+            return Response(
+                {"error": f"Invalid severity. Must be one of: {', '.join(sorted(VALID_SEVERITIES))}"},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(rule__severity=severity)
     rule_id = request.query_params.get("rule")
     if rule_id:
+        try:
+            uuid.UUID(rule_id)
+        except (ValueError, AttributeError):
+            return Response(
+                {"error": "Invalid rule ID. Must be a valid UUID."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(rule_id=rule_id)
     is_fp = request.query_params.get("is_false_positive")
     show_all = request.query_params.get("show_all")
@@ -45,6 +65,13 @@ def finding_list(request, project_slug):
         findings = findings.exclude(is_false_positive=True)
     scan_id = request.query_params.get("scan")
     if scan_id:
+        try:
+            uuid.UUID(scan_id)
+        except (ValueError, AttributeError):
+            return Response(
+                {"error": "Invalid scan ID. Must be a valid UUID."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(last_seen_scan_id=scan_id)
 
     return paginate_queryset(findings, request, FindingSerializer)

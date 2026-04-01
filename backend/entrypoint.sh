@@ -15,6 +15,9 @@ echo "Database ready."
 echo "Running migrations..."
 python manage.py migrate --noinput
 
+echo "Registering periodic schedules..."
+python manage.py register_schedules
+
 # Run Django deployment checklist — surfaces misconfigurations early.
 # In development (DJANGO_SETTINGS_MODULE=config.settings.local) this is
 # advisory; in production it will catch missing ALLOWED_HOSTS, SECRET_KEY,

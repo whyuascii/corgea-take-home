@@ -67,6 +67,7 @@ ALLOWED_CONTENT_TYPES = {
 
 VALID_SCANNER_TYPES = {"semgrep", "sarif", "generic"}
 VALID_BULK_ACTIONS = {"status_change", "false_positive"}
+VALID_SEVERITIES = {"ERROR", "WARNING", "INFO"}
 
 SARIF_SEVERITY_MAP = {
     "error": "ERROR",

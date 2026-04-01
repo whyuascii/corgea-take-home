@@ -140,6 +140,7 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+# Dev-only default; overridden by production.py with Redis for multi-worker safety.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -192,6 +193,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 ASGI_APPLICATION = "config.asgi.application"
+# Dev-only default; overridden by production.py with Redis for cross-process messaging.
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",

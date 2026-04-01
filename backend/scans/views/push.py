@@ -136,8 +136,7 @@ def scan_push(request, project_slug):
     serializer = ScanPushSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    project.last_used_at = timezone.now()
-    project.save(update_fields=["last_used_at"])
+    Project.objects.filter(id=project.id).update(last_used_at=timezone.now())
 
     scanner_type = request.query_params.get("scanner", "semgrep")
     if scanner_type not in VALID_SCANNER_TYPES:

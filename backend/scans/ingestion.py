@@ -73,9 +73,7 @@ def resolve_disappeared_findings(project, seen_finding_ids, scan):
     if not resolved_ids:
         return resolved_ids
 
-    Finding.objects.filter(id__in=resolved_ids).update(
-        status=Finding.Status.RESOLVED,
-    )
+    disappeared.update(status=Finding.Status.RESOLVED)
 
     resolve_history = [
         FindingHistory(

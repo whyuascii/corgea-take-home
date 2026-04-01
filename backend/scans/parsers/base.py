@@ -40,9 +40,17 @@ class NormalizedResult:
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        """Truncate oversized string fields at the data-layer boundary."""
+        """Truncate oversized string fields and coerce int fields at the data-layer boundary."""
         self.check_id = self.check_id[:MAX_RULE_ID_LEN]
         self.path = self.path[:MAX_PATH_LEN]
         self.severity = self.severity[:MAX_SEVERITY_LEN]
         self.message = self.message[:MAX_MESSAGE_LEN]
         self.snippet = self.snippet[:MAX_SNIPPET_LEN]
+
+        for attr in ("line_start", "line_end", "col_start", "col_end"):
+            val = getattr(self, attr)
+            if not isinstance(val, int):
+                try:
+                    setattr(self, attr, int(val))
+                except (ValueError, TypeError):
+                    setattr(self, attr, 0)

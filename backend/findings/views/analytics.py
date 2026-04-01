@@ -1,4 +1,4 @@
-import defusedcsv
+from defusedcsv import csv as defusedcsv
 from datetime import timedelta
 
 from django.db.models import Count, Q
@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
-from core.constants import DB_ITERATOR_CHUNK_SIZE, DEFAULT_TREND_DAYS, MAX_EXPORT_ROWS, MAX_TREND_DAYS, SEARCH_QUERY_MAX_LEN, SEARCH_QUERY_MIN_LEN
+from core.constants import DB_ITERATOR_CHUNK_SIZE, DEFAULT_TREND_DAYS, MAX_EXPORT_ROWS, MAX_TREND_DAYS, SEARCH_QUERY_MAX_LEN, SEARCH_QUERY_MIN_LEN, VALID_SEVERITIES
 from core.pagination import paginate_queryset
 from core.throttles import ExportThrottle
 from projects.membership import ProjectMembership
@@ -82,9 +82,20 @@ def finding_export(request, project_slug):
     # Apply same filters as finding_list
     finding_status = request.query_params.get("status")
     if finding_status:
+        if finding_status not in Finding.Status.values:
+            return Response(
+                {"error": f"Invalid status. Must be one of: {', '.join(Finding.Status.values)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(status=finding_status)
     severity = request.query_params.get("severity")
     if severity:
+        severity = severity.upper()
+        if severity not in VALID_SEVERITIES:
+            return Response(
+                {"error": f"Invalid severity. Must be one of: {', '.join(sorted(VALID_SEVERITIES))}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         findings = findings.filter(rule__severity=severity)
 
     # Cap to MAX_EXPORT_ROWS to avoid memory exhaustion on very large projects.

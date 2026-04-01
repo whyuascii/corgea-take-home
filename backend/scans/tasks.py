@@ -34,6 +34,19 @@ def send_scan_notifications(scan_id):
 
 def cleanup_old_scans():
     """Periodic task: nullify raw_report on old scans per retention policy."""
-    from django.core.management import call_command
+    from datetime import timedelta
 
-    call_command("cleanup_old_scans")
+    from django.utils import timezone
+
+    from core.constants import DATA_RETENTION_DAYS
+    from scans.models import Scan
+
+    cutoff = timezone.now() - timedelta(days=DATA_RETENTION_DAYS)
+    updated = (
+        Scan.objects
+        .filter(created_at__lt=cutoff, archived_at__isnull=True)
+        .exclude(raw_report={})
+        .update(raw_report={}, archived_at=timezone.now())
+    )
+    if updated:
+        logger.info("Cleaned up %d old scan(s) past %d-day retention", updated, DATA_RETENTION_DAYS)

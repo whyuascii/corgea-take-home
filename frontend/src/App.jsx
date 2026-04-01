@@ -23,13 +23,13 @@ import { ProjectLayout } from './context/ProjectContext'
 import SessionTimeoutWarning from './components/SessionTimeoutWarning'
 
 function ProtectedRoute({ children }) {
-  const { token } = useAuth()
-  return token ? children : <Navigate to="/login" />
+  const { isAuthenticated } = useAuth()
+  return isAuthenticated ? children : <Navigate to="/login" />
 }
 
 function AuthenticatedApp({ children }) {
-  const { token } = useAuth()
-  if (!token) return children
+  const { isAuthenticated } = useAuth()
+  if (!isAuthenticated) return children
   return (
     <>
       {children}

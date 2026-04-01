@@ -1,30 +1,31 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import api from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [token, setToken] = useState(() => sessionStorage.getItem('token'))
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/auth/me/')
+      .then(({ data }) => setUser(data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false))
+  }, [])
 
   const login = async (username, password) => {
     const { data } = await api.post('/auth/login/', { username, password })
-    sessionStorage.setItem('token', data.token)
-    setToken(data.token)
     setUser(data.user)
   }
 
   const register = async (username, email, password) => {
     const { data } = await api.post('/auth/register/', { username, email, password })
-    sessionStorage.setItem('token', data.token)
-    setToken(data.token)
     setUser(data.user)
   }
 
   const logout = async () => {
     try { await api.post('/auth/logout/') } catch {}
-    sessionStorage.removeItem('token')
-    setToken(null)
     setUser(null)
   }
 
@@ -43,8 +44,10 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  if (loading) return null
+
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, updateUser, refreshUser }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, register, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

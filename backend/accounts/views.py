@@ -1,14 +1,18 @@
 from datetime import timedelta
 
+from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
+from django.middleware.csrf import get_token
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from core.constants import LOCKOUT_WINDOW_MINUTES, MAX_LOGIN_ATTEMPTS
+from core.authentication import AUTH_COOKIE_NAME
+from core.constants import LOCKOUT_WINDOW_MINUTES, MAX_LOGIN_ATTEMPTS, TOKEN_LIFETIME_HOURS
 from core.ip_utils import get_client_ip
 from core.audit import log_audit
 from findings.models import AuditLog
@@ -27,6 +31,27 @@ from drf_spectacular.utils import extend_schema
 User = get_user_model()
 
 LOCKOUT_WINDOW = timedelta(minutes=LOCKOUT_WINDOW_MINUTES)
+
+
+def _set_auth_cookie(response, token_key, request):
+    """Set the httpOnly auth cookie and seed the CSRF cookie."""
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        token_key,
+        httponly=True,
+        secure=django_settings.SESSION_COOKIE_SECURE
+        if hasattr(django_settings, "SESSION_COOKIE_SECURE")
+        else False,
+        samesite="Lax",
+        path="/",
+        max_age=TOKEN_LIFETIME_HOURS * 3600,
+    )
+    get_token(request)  # seed csrftoken cookie
+
+
+def _clear_auth_cookie(response):
+    """Delete the httpOnly auth cookie."""
+    response.delete_cookie(AUTH_COOKIE_NAME, path="/", samesite="Lax")
 
 
 def _is_locked_out(ip, username=None):
@@ -59,15 +84,18 @@ def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
-    token, _ = Token.objects.get_or_create(user=user)
+    Token.objects.filter(user=user).delete()
+    token = Token.objects.create(user=user)
     log_audit(
         request, AuditLog.Action.REGISTER, "user", user.pk,
         metadata={"username": user.username},
     )
-    return Response(
+    response = Response(
         {"user": UserSerializer(user).data, "token": token.key},
         status=status.HTTP_201_CREATED,
     )
+    _set_auth_cookie(response, token.key, request)
+    return response
 
 
 @extend_schema(tags=["Auth"], request=LoginSerializer, responses=UserSerializer)
@@ -103,12 +131,15 @@ def login(request):
         )
 
     LoginAttempt.objects.create(username=username, ip_address=ip, success=True)
-    token, _ = Token.objects.get_or_create(user=user)
+    Token.objects.filter(user=user).delete()
+    token = Token.objects.create(user=user)
     log_audit(
         request, AuditLog.Action.LOGIN, "user", user.pk,
         metadata={"username": user.username},
     )
-    return Response({"user": UserSerializer(user).data, "token": token.key})
+    response = Response({"user": UserSerializer(user).data, "token": token.key})
+    _set_auth_cookie(response, token.key, request)
+    return response
 
 
 @extend_schema(tags=["Auth"])
@@ -120,10 +151,13 @@ def logout(request):
         metadata={"username": request.user.username},
     )
     request.auth.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    response = Response(status=status.HTTP_204_NO_CONTENT)
+    _clear_auth_cookie(response)
+    return response
 
 
 @extend_schema(tags=["Auth"], responses=UserSerializer)
+@ensure_csrf_cookie
 @api_view(["GET", "PATCH"])
 def me(request):
     """Return or update the profile of the currently authenticated user."""

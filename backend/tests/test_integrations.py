@@ -209,7 +209,7 @@ class TestTicketClosure:
             linear_api_key="lin_api_key",
         )
 
-    @patch("integrations.ticket_service.transition_jira_issue_to_done", return_value=True)
+    @patch("integrations.jira_client.transition_jira_issue_to_done", return_value=True)
     def test_close_jira_ticket_on_resolve(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-42"
@@ -227,7 +227,7 @@ class TestTicketClosure:
         assert history.exists()
         assert "VULN-42" in history.first().notes
 
-    @patch("integrations.ticket_service.transition_linear_issue_to_done", return_value=True)
+    @patch("integrations.linear_client.transition_linear_issue_to_done", return_value=True)
     def test_close_linear_ticket_on_resolve(self, mock_transition, finding):
         self._make_config(finding.project, "linear")
         finding.linear_ticket_id = "LIN-123"
@@ -258,7 +258,7 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("integrations.ticket_service.transition_jira_issue_to_done", return_value=False)
+    @patch("integrations.jira_client.transition_jira_issue_to_done", return_value=False)
     def test_skip_closure_when_already_done(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-99"
@@ -274,7 +274,7 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("integrations.ticket_service.transition_jira_issue_to_done", side_effect=Exception("API error"))
+    @patch("integrations.jira_client.transition_jira_issue_to_done", side_effect=Exception("API error"))
     def test_closure_failure_logged_not_raised(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-50"
@@ -290,8 +290,8 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("integrations.ticket_service.close_tickets_for_finding")
-    def test_dispatch_ticket_closure_filters_ticketed(self, mock_close, finding):
+    @patch("django_q.tasks.async_task")
+    def test_dispatch_ticket_closure_filters_ticketed(self, mock_async, finding):
         """Only findings with ticket IDs get closure dispatched."""
         finding_with_ticket = finding
         finding_with_ticket.jira_ticket_id = "VULN-10"
@@ -311,5 +311,8 @@ class TestTicketClosure:
         from scans.ingestion import dispatch_ticket_closure
         dispatch_ticket_closure([finding_with_ticket.id, finding_no_ticket.id])
 
-        # Sync fallback should only close the one with a ticket
-        assert mock_close.call_count == 1
+        # Only the finding with a ticket ID should be enqueued
+        assert mock_async.call_count == 1
+        mock_async.assert_called_once_with(
+            "integrations.tasks.close_tickets_async", str(finding_with_ticket.id),
+        )

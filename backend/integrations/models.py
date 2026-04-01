@@ -3,6 +3,8 @@ import uuid
 
 from django.db import models
 
+from core.fields import EncryptedTextField
+
 
 def generate_webhook_secret():
     return secrets.token_urlsafe(32)
@@ -23,11 +25,11 @@ class IntegrationConfig(models.Model):
     # Jira fields
     jira_instance_url = models.URLField(blank=True, default="")
     jira_project_key = models.CharField(max_length=50, blank=True, default="")
-    jira_api_token = models.CharField(max_length=500, blank=True, default="")
+    jira_api_token = EncryptedTextField(blank=True, default="")
     jira_user_email = models.EmailField(blank=True, default="")
 
     # Linear fields
-    linear_api_key = models.CharField(max_length=500, blank=True, default="")
+    linear_api_key = EncryptedTextField(blank=True, default="")
     linear_team_id = models.CharField(max_length=100, blank=True, default="")
 
     webhook_secret = models.CharField(

@@ -1,10 +1,70 @@
 import logging
 
+import requests
 from findings.models.history import FindingHistory
 
 from .models import IntegrationConfig
 
 logger = logging.getLogger(__name__)
+
+
+def close_tickets_for_finding(finding):
+    """Close tickets in all enabled integrations for a resolved finding.
+
+    Called after scan ingestion when findings disappear (are resolved).
+    Failures are logged but never raised — ticket closure must not block scans.
+    """
+    configs = IntegrationConfig.objects.filter(
+        project=finding.project, is_enabled=True
+    )
+
+    for config in configs:
+        try:
+            if config.provider == IntegrationConfig.Provider.JIRA:
+                _close_jira_ticket(config, finding)
+            elif config.provider == IntegrationConfig.Provider.LINEAR:
+                _close_linear_ticket(config, finding)
+        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError, Exception):
+            logger.exception(
+                "Failed to close %s ticket for finding %s",
+                config.provider, finding.id,
+            )
+
+
+def _close_jira_ticket(config, finding):
+    if not finding.jira_ticket_id:
+        return
+
+    from .jira_client import transition_jira_issue_to_done
+
+    transitioned = transition_jira_issue_to_done(config, finding.jira_ticket_id)
+    if transitioned:
+        FindingHistory.objects.create(
+            finding=finding,
+            change_type=FindingHistory.ChangeType.TICKET_CLOSED,
+            old_status=finding.status,
+            new_status=finding.status,
+            jira_ticket_url=finding.jira_ticket_url,
+            notes=f"Closed Jira ticket: {finding.jira_ticket_id}",
+        )
+
+
+def _close_linear_ticket(config, finding):
+    if not finding.linear_ticket_id:
+        return
+
+    from .linear_client import transition_linear_issue_to_done
+
+    transitioned = transition_linear_issue_to_done(config, finding.linear_ticket_id)
+    if transitioned:
+        FindingHistory.objects.create(
+            finding=finding,
+            change_type=FindingHistory.ChangeType.TICKET_CLOSED,
+            old_status=finding.status,
+            new_status=finding.status,
+            linear_ticket_url=finding.linear_ticket_url,
+            notes=f"Closed Linear ticket: {finding.linear_ticket_id}",
+        )
 
 
 def create_tickets_for_finding(finding):
@@ -23,7 +83,7 @@ def create_tickets_for_finding(finding):
                 _create_jira_ticket(config, finding)
             elif config.provider == IntegrationConfig.Provider.LINEAR:
                 _create_linear_ticket(config, finding)
-        except Exception:
+        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError):
             logger.exception(
                 "Failed to create %s ticket for finding %s",
                 config.provider, finding.id,

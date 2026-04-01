@@ -2,14 +2,18 @@ import logging
 
 import requests
 
-logger = logging.getLogger(__name__)
+from core.constants import INTEGRATION_API_TIMEOUT, INTEGRATION_CREATE_TIMEOUT, LINEAR_API_URL
 
-LINEAR_API_URL = "https://api.linear.app/graphql"
+logger = logging.getLogger(__name__)
 
 
 def _headers(config):
+    api_key = config.linear_api_key
+    # Linear API expects "Bearer <token>" format
+    if not api_key.startswith("Bearer "):
+        api_key = f"Bearer {api_key}"
     return {
-        "Authorization": config.linear_api_key,
+        "Authorization": api_key,
         "Content-Type": "application/json",
     }
 
@@ -29,15 +33,16 @@ def test_linear_connection(config):
             LINEAR_API_URL,
             headers=_headers(config),
             json={"query": query, "variables": {"teamId": config.linear_team_id}},
-            timeout=15,
+            timeout=INTEGRATION_API_TIMEOUT,
         )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("data", {}).get("team"):
-                return {"ok": True, "team_name": data["data"]["team"]["name"]}
+                team_name = data.get("data", {}).get("team", {}).get("name", "")
+                return {"ok": True, "team_name": team_name}
             errors = data.get("errors", [{}])
             return {"ok": False, "error": errors[0].get("message", "Team not found")}
-        return {"ok": False, "error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        return {"ok": False, "error": f"HTTP {resp.status_code}: Check API key and team ID"}
     except requests.RequestException as e:
         return {"ok": False, "error": str(e)}
 
@@ -62,13 +67,13 @@ def get_linear_issue_status(config, issue_id):
             LINEAR_API_URL,
             headers=_headers(config),
             json={"query": query, "variables": {"issueId": issue_id}},
-            timeout=15,
+            timeout=INTEGRATION_API_TIMEOUT,
         )
         if resp.status_code == 200:
             data = resp.json()
             issue = data.get("data", {}).get("issue")
             if issue and issue.get("state"):
-                return issue["state"]["type"]
+                return issue.get("state", {}).get("type")
             logger.warning(
                 "Linear issue %s not found or has no state", issue_id,
             )
@@ -78,11 +83,91 @@ def get_linear_issue_status(config, issue_id):
             issue_id, resp.status_code,
         )
         return None
-    except Exception:
+    except (requests.RequestException, ConnectionError, KeyError):
         logger.warning(
             "Failed to fetch Linear issue %s status", issue_id, exc_info=True,
         )
         return None
+
+
+def transition_linear_issue_to_done(config, issue_id):
+    """Transition a Linear issue to a 'completed' workflow state.
+
+    Returns True if transitioned, False if already completed/cancelled or
+    no completed state found. Lets exceptions propagate to the caller.
+    """
+    current_status = get_linear_issue_status(config, issue_id)
+    if current_status in ("completed", "cancelled"):
+        return False
+
+    # Query the team's workflow states to find the completed state
+    states_query = """
+    query($teamId: String!) {
+        team(id: $teamId) {
+            states {
+                nodes {
+                    id
+                    type
+                }
+            }
+        }
+    }
+    """
+    resp = requests.post(
+        LINEAR_API_URL,
+        headers=_headers(config),
+        json={"query": states_query, "variables": {"teamId": config.linear_team_id}},
+        timeout=INTEGRATION_API_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    if data.get("errors"):
+        raise Exception(data["errors"][0].get("message", "Linear API error"))
+
+    states = (
+        data.get("data", {}).get("team", {}).get("states", {}).get("nodes", [])
+    )
+    completed_state = next(
+        (s for s in states if s.get("type") == "completed"), None,
+    )
+    if completed_state is None:
+        logger.warning(
+            "No completed workflow state found for Linear team %s",
+            config.linear_team_id,
+        )
+        return False
+
+    # Transition the issue
+    mutation = """
+    mutation($issueId: String!, $stateId: String!) {
+        issueUpdate(id: $issueId, input: { stateId: $stateId }) {
+            success
+        }
+    }
+    """
+    resp = requests.post(
+        LINEAR_API_URL,
+        headers=_headers(config),
+        json={
+            "query": mutation,
+            "variables": {
+                "issueId": issue_id,
+                "stateId": completed_state["id"],
+            },
+        },
+        timeout=INTEGRATION_API_TIMEOUT,
+    )
+    resp.raise_for_status()
+    result = resp.json()
+
+    if result.get("errors"):
+        raise Exception(result["errors"][0].get("message", "Linear API error"))
+
+    success = result.get("data", {}).get("issueUpdate", {}).get("success", False)
+    if success:
+        logger.info("Transitioned Linear issue %s to completed", issue_id)
+    return success
 
 
 def create_linear_issue(config, finding):
@@ -123,13 +208,25 @@ def create_linear_issue(config, finding):
         LINEAR_API_URL,
         headers=_headers(config),
         json={"query": mutation, "variables": variables},
-        timeout=30,
+        timeout=INTEGRATION_CREATE_TIMEOUT,
     )
     resp.raise_for_status()
     data = resp.json()
 
     if data.get("errors"):
-        raise Exception(data["errors"][0].get("message", "Linear API error"))
+        error_msg = data.get("errors", [{}])[0].get("message", "Linear API error")
+        raise Exception(error_msg)
 
-    issue = data["data"]["issueCreate"]["issue"]
-    return issue["id"], issue["url"]
+    issue_create = data.get("data", {}).get("issueCreate", {})
+    issue = issue_create.get("issue")
+    if not issue:
+        raise Exception(
+            "Linear API response missing issue data in issueCreate"
+        )
+    issue_id = issue.get("id")
+    issue_url = issue.get("url")
+    if not issue_id or not issue_url:
+        raise Exception(
+            "Linear API response missing 'id' or 'url' in issue data"
+        )
+    return issue_id, issue_url

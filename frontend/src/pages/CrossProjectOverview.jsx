@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import api from '../api/client'
 import { extractResults, getTotalPages } from '../api/helpers'
 import Pagination from '../components/Pagination'
 import RuleCard from '../components/RuleCard'
 import PatternBanner from '../components/PatternBanner'
+import useWebSocket from '../hooks/useWebSocket'
 
 function StatCard({ label, value }) {
   return (
@@ -29,8 +30,23 @@ export default function CrossProjectOverview() {
   const [loadingFindings, setLoadingFindings] = useState(new Set())
   const [loadingRules, setLoadingRules] = useState(true)
 
-  useEffect(() => {
+  const fetchSummary = useCallback(() => {
     api.get('/overview/summary/').then(r => setSummary(r.data))
+  }, [])
+
+  const handleWsMessage = useCallback((msg) => {
+    if (msg.event === 'scan_complete') {
+      fetchSummary()
+      fetchRules()
+    }
+  }, [])
+
+  useWebSocket('/ws/dashboard/', {
+    onMessage: handleWsMessage,
+  })
+
+  useEffect(() => {
+    fetchSummary()
   }, [])
 
   useEffect(() => {

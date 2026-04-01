@@ -158,6 +158,17 @@ def dispatch_notifications(scan, project, summary):
         logger.debug("Could not broadcast scan complete for scan %s", scan.id)
 
     try:
+        from core.realtime import broadcast_dashboard_update
+        broadcast_dashboard_update(str(project.owner_id), {
+            "event": "scan_complete",
+            "project_slug": project.slug,
+            "scan_id": str(scan.id),
+            "summary": summary,
+        })
+    except (OSError, ConnectionError, RuntimeError):
+        logger.debug("Could not broadcast dashboard update for project %s", project.id)
+
+    try:
         from core.cache import invalidate_project_cache
         invalidate_project_cache(project.id, project_slug=project.slug)
     except (ImportError, ConnectionError, OSError):
@@ -251,6 +262,8 @@ def ingest_scan(scan):
     ticket_candidates = []
     history_buffer = []
     skipped_count = 0
+    total_results = len(normalized_results)
+    processed_count = 0
 
     with transaction.atomic():
         for nr in normalized_results:
@@ -290,6 +303,19 @@ def ingest_scan(scan):
                     reopened_count += 1
 
             seen_finding_ids.add(finding.id)
+            processed_count += 1
+
+            if processed_count % 100 == 0 or processed_count == total_results:
+                try:
+                    from core.realtime import broadcast_scan_progress
+                    broadcast_scan_progress(project.slug, {
+                        "event": "scan_progress",
+                        "scan_id": str(scan.id),
+                        "processed": processed_count,
+                        "total": total_results,
+                    })
+                except (OSError, ConnectionError, RuntimeError):
+                    pass
 
             if len(history_buffer) >= HISTORY_BATCH_SIZE:
                 FindingHistory.objects.bulk_create(history_buffer)

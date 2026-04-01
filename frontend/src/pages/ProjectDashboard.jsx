@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 import TrendsChart from '../components/TrendsChart'
 import QuickUpload from '../components/QuickUpload'
+import useWebSocket from '../hooks/useWebSocket'
 
 const STAT_COLOR_MAP = {
   gray: {
@@ -68,6 +69,17 @@ export default function ProjectDashboard() {
   const fetchDashboard = () => {
     api.get(`/projects/${slug}/findings/summary/`).then((r) => setData(r.data))
   }
+
+  const handleWsMessage = useCallback((msg) => {
+    if (msg.event === 'scan_complete') {
+      fetchDashboard()
+    }
+  }, [slug])
+
+  useWebSocket(`/ws/projects/${slug}/scans/`, {
+    enabled: !!slug,
+    onMessage: handleWsMessage,
+  })
 
   useEffect(() => {
     fetchDashboard()

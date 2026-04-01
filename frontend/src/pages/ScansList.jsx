@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import api from '../api/client'
 import { extractResults, getTotalPages } from '../api/helpers'
 import Pagination from '../components/Pagination'
+import useWebSocket from '../hooks/useWebSocket'
 
 const PAGE_SIZE = 25
 
@@ -14,7 +15,22 @@ export default function ScansList() {
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState(null) // { type: 'success'|'error', message }
   const [page, setPage] = useState(1)
+  const [scanProgress, setScanProgress] = useState(null)
   const fileRef = useRef()
+
+  const handleWsMessage = useCallback((msg) => {
+    if (msg.event === 'scan_complete') {
+      setScanProgress(null)
+      fetchScans()
+    } else if (msg.event === 'scan_progress') {
+      setScanProgress(msg)
+    }
+  }, [])
+
+  useWebSocket(`/ws/projects/${slug}/scans/`, {
+    enabled: !!slug,
+    onMessage: handleWsMessage,
+  })
 
   useEffect(() => { fetchScans() }, [slug, page])
 
@@ -93,6 +109,21 @@ export default function ScansList() {
           </label>
         </div>
       </div>
+
+      {scanProgress && (
+        <div className="mb-4 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-indigo-400 font-medium">Scan in progress...</span>
+            <span className="text-gray-400">{scanProgress.processed} / {scanProgress.total} findings</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-2">
+            <div
+              className="bg-indigo-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${Math.round((scanProgress.processed / scanProgress.total) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">

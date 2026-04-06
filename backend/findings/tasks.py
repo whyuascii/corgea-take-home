@@ -1,19 +1,19 @@
 import logging
 from smtplib import SMTPException
 
+from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
+
+from core.constants import SLA_BATCH_SIZE
+from core.emails import send_sla_breach_email
+from findings.models import Finding
 
 logger = logging.getLogger(__name__)
 
 
 def check_sla_breaches():
     """Periodic task: mark findings that have exceeded their SLA deadline."""
-    from django.core.cache import cache
-    from django.db import transaction
-
-    from core.constants import SLA_BATCH_SIZE
-    from findings.models import Finding
-
     # Distributed lock to prevent overlapping executions across workers
     if not cache.add("sla_breach_check_lock", "1", timeout=300):
         logger.debug("check_sla_breaches: skipping — another worker holds the lock")
@@ -50,8 +50,6 @@ def check_sla_breaches():
             projects = {}
             for finding in breached_findings:
                 projects.setdefault(finding.project_id, []).append(finding)
-
-            from core.emails import send_sla_breach_email
 
             for project_id, findings in projects.items():
                 project = findings[0].project

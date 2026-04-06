@@ -44,6 +44,30 @@ resource "aws_s3_bucket_public_access_block" "security_access_logs" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "security_access_logs" {
+  count  = var.enable_cloudtrail || var.enable_aws_config ? 1 : 0
+  bucket = aws_s3_bucket.security_access_logs[0].id
+
+  rule {
+    id     = "expire-old-access-logs"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
+}
+
 resource "aws_s3_bucket" "cloudtrail" {
   count  = var.enable_cloudtrail ? 1 : 0
   bucket = local.trail_bucket_name

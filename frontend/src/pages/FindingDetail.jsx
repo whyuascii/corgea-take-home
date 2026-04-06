@@ -8,10 +8,21 @@ import FindingComments from '../components/FindingComments'
 import FindingHistory from '../components/FindingHistory'
 import { useAuth } from '../context/AuthContext'
 
+function isSafeUrl(url) {
+  if (typeof url !== 'string' || !url) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 export default function FindingDetail() {
   const { slug, findingId } = useParams()
   const { user } = useAuth()
   const [finding, setFinding] = useState(null)
+  const [error, setError] = useState(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
   const [fpModalOpen, setFpModalOpen] = useState(false)
@@ -19,27 +30,58 @@ export default function FindingDetail() {
   const [commentLoading, setCommentLoading] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(false)
 
-  useEffect(() => { fetchFinding() }, [slug, findingId])
+  useEffect(() => {
+    let cancelled = false
+    const fetchData = async () => {
+      try {
+        const { data } = await api.get(`/projects/${slug}/findings/${findingId}/`)
+        if (!cancelled) {
+          setFinding(data)
+          setForm({
+            jira_ticket_url: data.jira_ticket_url || '',
+            linear_ticket_url: data.linear_ticket_url || '',
+            pr_url: data.pr_url || '',
+          })
+        }
+      } catch {
+        if (!cancelled) setError('Failed to load finding')
+      }
+    }
+    fetchData()
+    return () => { cancelled = true }
+  }, [slug, findingId])
 
   const fetchFinding = async () => {
-    const { data } = await api.get(`/projects/${slug}/findings/${findingId}/`)
-    setFinding(data)
-    setForm({
-      jira_ticket_url: data.jira_ticket_url || '',
-      linear_ticket_url: data.linear_ticket_url || '',
-      pr_url: data.pr_url || '',
-    })
+    try {
+      const { data } = await api.get(`/projects/${slug}/findings/${findingId}/`)
+      setFinding(data)
+      setForm({
+        jira_ticket_url: data.jira_ticket_url || '',
+        linear_ticket_url: data.linear_ticket_url || '',
+        pr_url: data.pr_url || '',
+      })
+    } catch {
+      setError('Failed to load finding')
+    }
   }
 
   const handleSave = async () => {
-    await api.patch(`/projects/${slug}/findings/${findingId}/`, form)
-    setEditing(false)
-    fetchFinding()
+    try {
+      await api.patch(`/projects/${slug}/findings/${findingId}/`, form)
+      setEditing(false)
+      fetchFinding()
+    } catch {
+      setError('Failed to save changes')
+    }
   }
 
   const handleFalsePositive = async (payload) => {
-    await api.post(`/projects/${slug}/findings/${findingId}/false-positive/`, payload)
-    fetchFinding()
+    try {
+      await api.post(`/projects/${slug}/findings/${findingId}/false-positive/`, payload)
+      fetchFinding()
+    } catch {
+      setError('Failed to update false positive status')
+    }
   }
 
   const handleAddComment = async () => {
@@ -49,16 +91,23 @@ export default function FindingDetail() {
       await api.post(`/projects/${slug}/findings/${findingId}/comments/`, { text: commentText })
       setCommentText('')
       fetchFinding()
+    } catch {
+      setError('Failed to add comment')
     } finally {
       setCommentLoading(false)
     }
   }
 
   const handleDeleteComment = async (commentId) => {
-    await api.delete(`/projects/${slug}/findings/${findingId}/comments/${commentId}/`)
-    fetchFinding()
+    try {
+      await api.delete(`/projects/${slug}/findings/${findingId}/comments/${commentId}/`)
+      fetchFinding()
+    } catch {
+      setError('Failed to delete comment')
+    }
   }
 
+  if (error && !finding) return <p className="text-red-400">{error}</p>
   if (!finding) return <p className="text-gray-500">Loading...</p>
 
   const severity = finding.effective_severity || finding.severity
@@ -106,6 +155,13 @@ export default function FindingDetail() {
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-gray-500 hover:text-gray-300">&times;</button>
+        </div>
+      )}
 
       {/* ========== Two-column layout ========== */}
       <div className="flex gap-6">
@@ -156,9 +212,9 @@ export default function FindingDetail() {
               </div>
             ) : (
               <div className="space-y-1 text-sm">
-                <p><span className="text-gray-500">Jira:</span> {finding.jira_ticket_url ? <a href={finding.jira_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.jira_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
-                <p><span className="text-gray-500">Linear:</span> {finding.linear_ticket_url ? <a href={finding.linear_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.linear_ticket_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
-                <p><span className="text-gray-500">PR:</span> {finding.pr_url ? <a href={finding.pr_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.pr_url}</a> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">Jira:</span> {isSafeUrl(finding.jira_ticket_url) ? <a href={finding.jira_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.jira_ticket_url}</a> : finding.jira_ticket_url ? <span className="text-gray-400">{finding.jira_ticket_url}</span> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">Linear:</span> {isSafeUrl(finding.linear_ticket_url) ? <a href={finding.linear_ticket_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.linear_ticket_url}</a> : finding.linear_ticket_url ? <span className="text-gray-400">{finding.linear_ticket_url}</span> : <span className="text-gray-600">&mdash;</span>}</p>
+                <p><span className="text-gray-500">PR:</span> {isSafeUrl(finding.pr_url) ? <a href={finding.pr_url} className="text-indigo-400 hover:underline" target="_blank" rel="noopener noreferrer">{finding.pr_url}</a> : finding.pr_url ? <span className="text-gray-400">{finding.pr_url}</span> : <span className="text-gray-600">&mdash;</span>}</p>
               </div>
             )}
           </div>

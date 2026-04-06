@@ -6,6 +6,7 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -14,11 +15,14 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setLoading(true)
     try {
       await login(username, password)
       navigate('/')
     } catch {
       setError('Invalid credentials')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -36,15 +40,19 @@ export default function Login() {
           <input
             type="text" placeholder="Username" value={username}
             onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            aria-label="Username"
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
           />
           <input
             type="password" placeholder="Password" value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            aria-label="Password"
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
           />
-          <button type="submit" className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">
-            Sign In
+          <button type="submit" disabled={loading} className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium">
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
         <p className="text-gray-400 text-sm mt-4">

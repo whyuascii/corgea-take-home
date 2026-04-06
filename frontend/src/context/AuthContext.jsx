@@ -44,7 +44,13 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  if (loading) return null
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <div className="text-gray-400 text-sm">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, register, logout, updateUser, refreshUser }}>

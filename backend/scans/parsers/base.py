@@ -51,6 +51,7 @@ class NormalizedResult:
             val = getattr(self, attr)
             if not isinstance(val, int):
                 try:
-                    setattr(self, attr, int(val))
+                    val = int(val)
                 except (ValueError, TypeError):
-                    setattr(self, attr, 0)
+                    val = 0
+            setattr(self, attr, max(val, 0))

@@ -21,6 +21,11 @@ def mark_false_positive(request, project_slug, finding_id):
     finding = get_object_or_404(Finding, id=finding_id, project=project)
 
     is_fp = request.data.get("is_false_positive", True)
+    if not isinstance(is_fp, bool):
+        return Response(
+            {"error": "is_false_positive must be a boolean"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     reason = request.data.get("reason", "")
     if not isinstance(reason, str):

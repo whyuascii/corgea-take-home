@@ -2,6 +2,9 @@ from datetime import timedelta
 
 from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -13,8 +16,10 @@ from rest_framework.response import Response
 
 from core.authentication import AUTH_COOKIE_NAME
 from core.constants import LOCKOUT_WINDOW_MINUTES, MAX_LOGIN_ATTEMPTS, TOKEN_LIFETIME_HOURS
+from core.emails import send_password_reset_email
 from core.ip_utils import get_client_ip
 from core.audit import log_audit
+from drf_spectacular.utils import extend_schema
 from findings.models import AuditLog
 
 from .models import LoginAttempt, PasswordResetToken
@@ -26,7 +31,6 @@ from .serializers import (
     UserSerializer,
 )
 from core.throttles import LoginThrottle, PasswordResetThrottle, RegistrationThrottle
-from drf_spectacular.utils import extend_schema
 
 User = get_user_model()
 
@@ -84,8 +88,9 @@ def register(request):
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
-    Token.objects.filter(user=user).delete()
-    token = Token.objects.create(user=user)
+    with transaction.atomic():
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
     log_audit(
         request, AuditLog.Action.REGISTER, "user", user.pk,
         metadata={"username": user.username},
@@ -131,8 +136,9 @@ def login(request):
         )
 
     LoginAttempt.objects.create(username=username, ip_address=ip, success=True)
-    Token.objects.filter(user=user).delete()
-    token = Token.objects.create(user=user)
+    with transaction.atomic():
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
     log_audit(
         request, AuditLog.Action.LOGIN, "user", user.pk,
         metadata={"username": user.username},
@@ -241,7 +247,6 @@ def forgot_password(request):
         )
 
         try:
-            from core.emails import send_password_reset_email
             send_password_reset_email(user, reset_token.token)
         except (OSError, ConnectionError, RuntimeError):
             pass  # Swallow send failures — never leak account existence
@@ -266,37 +271,40 @@ def reset_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    try:
-        reset_token = PasswordResetToken.objects.select_related("user").get(token=token_str)
-    except PasswordResetToken.DoesNotExist:
-        return Response(
-            {"error": "Invalid or expired reset token."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    with transaction.atomic():
+        try:
+            reset_token = (
+                PasswordResetToken.objects.select_for_update()
+                .select_related("user")
+                .get(token=token_str)
+            )
+        except PasswordResetToken.DoesNotExist:
+            return Response(
+                {"error": "Invalid or expired reset token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    if not reset_token.is_valid():
-        return Response(
-            {"error": "Invalid or expired reset token."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        if not reset_token.is_valid():
+            return Response(
+                {"error": "Invalid or expired reset token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    from django.contrib.auth.password_validation import validate_password
-    from django.core.exceptions import ValidationError
-    try:
-        validate_password(new_password, user=reset_token.user)
-    except ValidationError as e:
-        return Response(
-            {"error": e.messages}, status=status.HTTP_400_BAD_REQUEST
-        )
+        try:
+            validate_password(new_password, user=reset_token.user)
+        except ValidationError as e:
+            return Response(
+                {"error": e.messages}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-    user = reset_token.user
-    user.set_password(new_password)
-    user.save(update_fields=["password"])
+        user = reset_token.user
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
 
-    reset_token.used_at = timezone.now()
-    reset_token.save(update_fields=["used_at"])
+        reset_token.used_at = timezone.now()
+        reset_token.save(update_fields=["used_at"])
 
-    Token.objects.filter(user=user).delete()
+        Token.objects.filter(user=user).delete()
 
     log_audit(
         request, AuditLog.Action.PASSWORD_RESET_COMPLETE, "user", user.pk,

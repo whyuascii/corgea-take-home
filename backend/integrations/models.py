@@ -33,7 +33,7 @@ class IntegrationConfig(models.Model):
     linear_team_id = models.CharField(max_length=100, blank=True, default="")
 
     webhook_secret = models.CharField(
-        max_length=64, default=generate_webhook_secret, unique=True
+        max_length=64, default=generate_webhook_secret, db_index=True
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

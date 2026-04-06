@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+import requests
 from rest_framework import status
 
 from findings.models import Finding, FindingHistory
@@ -208,7 +209,7 @@ class TestTicketClosure:
             linear_api_key="lin_api_key",
         )
 
-    @patch("integrations.jira_client.transition_jira_issue_to_done", return_value=True)
+    @patch("integrations.ticket_service.transition_jira_issue_to_done", return_value=True)
     def test_close_jira_ticket_on_resolve(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-42"
@@ -226,7 +227,7 @@ class TestTicketClosure:
         assert history.exists()
         assert "VULN-42" in history.first().notes
 
-    @patch("integrations.linear_client.transition_linear_issue_to_done", return_value=True)
+    @patch("integrations.ticket_service.transition_linear_issue_to_done", return_value=True)
     def test_close_linear_ticket_on_resolve(self, mock_transition, finding):
         self._make_config(finding.project, "linear")
         finding.linear_ticket_id = "LIN-123"
@@ -257,7 +258,7 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("integrations.jira_client.transition_jira_issue_to_done", return_value=False)
+    @patch("integrations.ticket_service.transition_jira_issue_to_done", return_value=False)
     def test_skip_closure_when_already_done(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-99"
@@ -273,7 +274,7 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("integrations.jira_client.transition_jira_issue_to_done", side_effect=Exception("API error"))
+    @patch("integrations.ticket_service.transition_jira_issue_to_done", side_effect=requests.RequestException("API error"))
     def test_closure_failure_logged_not_raised(self, mock_transition, finding):
         self._make_config(finding.project, "jira")
         finding.jira_ticket_id = "VULN-50"
@@ -289,7 +290,7 @@ class TestTicketClosure:
             change_type=FindingHistory.ChangeType.TICKET_CLOSED,
         ).exists()
 
-    @patch("django_q.tasks.async_task")
+    @patch("scans.ingestion.async_task")
     def test_dispatch_ticket_closure_filters_ticketed(self, mock_async, finding):
         """Only findings with ticket IDs get closure dispatched."""
         finding_with_ticket = finding

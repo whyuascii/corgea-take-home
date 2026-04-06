@@ -87,6 +87,7 @@ module "primary" {
   redis_num_cache_nodes          = var.redis_num_cache_nodes
   redis_snapshot_retention_limit = var.redis_snapshot_retention_limit
   redis_snapshot_window          = var.redis_snapshot_window
+  redis_auth_token               = var.redis_auth_token
   enable_global_datastore        = var.enable_cross_region && var.enable_global_datastore
 
   alb_acm_certificate_arn = var.primary_alb_acm_certificate_arn
@@ -167,6 +168,7 @@ module "secondary" {
   redis_num_cache_nodes             = var.redis_num_cache_nodes
   redis_snapshot_retention_limit    = var.redis_snapshot_retention_limit
   redis_snapshot_window             = var.redis_snapshot_window
+  redis_auth_token                  = var.redis_auth_token
   enable_global_datastore           = var.enable_global_datastore
   redis_global_replication_group_id = module.primary.redis_global_replication_group_id
 

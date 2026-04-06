@@ -65,9 +65,15 @@ function StatCard({ label, value, color }) {
 export default function ProjectDashboard() {
   const { slug } = useParams()
   const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
 
-  const fetchDashboard = () => {
-    api.get(`/projects/${slug}/findings/summary/`).then((r) => setData(r.data))
+  const fetchDashboard = async () => {
+    try {
+      const r = await api.get(`/projects/${slug}/findings/summary/`)
+      setData(r.data)
+    } catch {
+      setError('Failed to load dashboard data')
+    }
   }
 
   const handleWsMessage = useCallback((msg) => {
@@ -85,6 +91,7 @@ export default function ProjectDashboard() {
     fetchDashboard()
   }, [slug])
 
+  if (error) return <p className="text-red-400">{error}</p>
   if (!data) return <p className="text-gray-500">Loading...</p>
 
   const { status_counts, total_active, severity_counts, total_findings, top_rules, recent_scans } = data

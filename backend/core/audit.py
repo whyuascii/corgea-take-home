@@ -1,10 +1,9 @@
 from core.ip_utils import get_client_ip
+from findings.models import AuditLog
 
 
 def log_audit(request, action, target_type, target_id="", project=None, metadata=None):
     """Helper to create audit log entries."""
-    from findings.models import AuditLog
-
     AuditLog.objects.create(
         user=request.user if request.user.is_authenticated else None,
         action=action,

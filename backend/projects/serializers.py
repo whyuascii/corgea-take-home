@@ -2,6 +2,8 @@ from django.db.models import Count, Q
 from rest_framework import serializers
 
 from drf_spectacular.utils import extend_schema_field
+from findings.models import Finding
+from scans.models import Scan
 
 from .membership import ProjectMembership
 from .models import Project
@@ -22,15 +24,22 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at", "last_used_at"]
 
-    @extend_schema_field(serializers.CharField(allow_null=True))
-    def get_api_key_hint(self, obj):
-        """Return a masked preview of the API key for privileged users only."""
+    def _get_membership(self, obj):
+        """Return membership from prefetched map if available, else query."""
+        membership_map = self.context.get("membership_map")
+        if membership_map is not None:
+            return membership_map.get(obj.pk)
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return None
-        membership = ProjectMembership.objects.filter(
+        return ProjectMembership.objects.filter(
             project=obj, user=request.user
         ).first()
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_api_key_hint(self, obj):
+        """Return a masked preview of the API key for privileged users only."""
+        membership = self._get_membership(obj)
         is_privileged = membership and membership.role in (
             ProjectMembership.Role.OWNER, ProjectMembership.Role.ADMIN
         )
@@ -43,24 +52,29 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_user_role(self, obj):
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return None
-        membership = ProjectMembership.objects.filter(
-            project=obj, user=request.user
-        ).first()
+        membership = self._get_membership(obj)
         return membership.role if membership else None
 
     @extend_schema_field(serializers.DictField(allow_null=True))
     def get_findings_summary(self, obj):
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return None
-        if not ProjectMembership.objects.filter(project=obj, user=request.user).exists():
+        membership = self._get_membership(obj)
+        if not membership:
             return None
 
-        from findings.models import Finding
-        from scans.models import Scan
+        # Use prefetched annotations if the queryset provided them (list view),
+        # otherwise fall back to per-object aggregate (detail view).
+        if hasattr(obj, "_findings_new"):
+            return {
+                "new": obj._findings_new,
+                "open": obj._findings_open,
+                "reopened": obj._findings_reopened,
+                "resolved": obj._findings_resolved,
+                "ignored": obj._findings_ignored,
+                "false_positive": obj._findings_fp,
+                "total": obj._findings_total,
+                "critical": obj._findings_critical,
+                "last_scan_at": obj._last_scan_at.isoformat() if obj._last_scan_at else None,
+            }
 
         agg = Finding.objects.filter(project=obj).aggregate(
             new=Count("id", filter=Q(status="new")),

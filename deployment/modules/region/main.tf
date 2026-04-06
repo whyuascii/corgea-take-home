@@ -125,6 +125,7 @@ module "redis" {
   num_cache_nodes             = var.redis_num_cache_nodes
   snapshot_retention_limit    = var.redis_snapshot_retention_limit
   snapshot_window             = var.redis_snapshot_window
+  auth_token                  = var.redis_auth_token
 }
 
 # Per-region S3 bucket for frontend assets (referenced by CDN origin groups)
@@ -191,6 +192,29 @@ resource "aws_s3_bucket_public_access_block" "access_logs" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    id     = "expire-old-access-logs"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
 }
 
 resource "aws_s3_bucket_logging" "frontend" {

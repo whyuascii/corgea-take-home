@@ -48,7 +48,7 @@ resource "aws_secretsmanager_secret_version" "main" {
   for_each = local.secrets
 
   secret_id     = aws_secretsmanager_secret.main[each.key].id
-  secret_string = each.value.required ? each.value.value : (each.value.value != "" ? each.value.value : "placeholder")
+  secret_string = each.value.required ? each.value.value : (each.value.value != "" ? each.value.value : " ")
 }
 
 resource "aws_ssm_parameter" "main" {

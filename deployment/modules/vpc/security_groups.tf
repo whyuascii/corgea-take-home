@@ -74,6 +74,20 @@ resource "aws_security_group" "ecs" {
   }
 }
 
+# When VPC endpoints are disabled, ECS tasks need HTTPS egress to reach
+# ECR, Secrets Manager, CloudWatch, and other AWS APIs via NAT Gateway.
+resource "aws_security_group_rule" "ecs_https_egress" {
+  count = var.enable_vpc_endpoints ? 0 : 1
+
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "HTTPS to AWS APIs via NAT (no VPC endpoints)"
+  security_group_id = aws_security_group.ecs.id
+}
+
 # Security groups are stateful — response traffic for allowed inbound is auto-permitted
 resource "aws_security_group" "rds" {
   name_prefix = "${local.name_prefix}-rds-"

@@ -51,6 +51,30 @@ resource "aws_s3_bucket_public_access_block" "config" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "config" {
+  count  = var.enable_aws_config ? 1 : 0
+  bucket = aws_s3_bucket.config[0].id
+
+  rule {
+    id     = "expire-old-config-snapshots"
+    status = "Enabled"
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 365
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 2555
+    }
+  }
+}
+
 resource "aws_iam_role" "config" {
   count = var.enable_aws_config ? 1 : 0
 

@@ -49,6 +49,11 @@ resource "aws_db_parameter_group" "postgres16" {
     value = "all"
   }
 
+  parameter {
+    name  = "rds.force_ssl"
+    value = "1"
+  }
+
   tags = {
     Name = "${local.name_prefix}-pg16-params"
   }
@@ -127,13 +132,15 @@ resource "aws_db_instance" "replica" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 
-  deletion_protection = var.deletion_protection
-  skip_final_snapshot = true
+  deletion_protection       = var.deletion_protection
+  skip_final_snapshot       = var.environment == "prod" ? false : var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "${local.name_prefix}-replica-final-snapshot"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
-  performance_insights_enabled = var.performance_insights_enabled
-  monitoring_interval          = var.environment == "prod" ? 60 : 0
+  performance_insights_enabled    = var.performance_insights_enabled
+  performance_insights_kms_key_id = var.replica_kms_key_arn != "" ? var.replica_kms_key_arn : null
+  monitoring_interval             = var.environment == "prod" ? 60 : 0
 
   auto_minor_version_upgrade = true
 

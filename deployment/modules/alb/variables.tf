@@ -77,9 +77,9 @@ variable "access_logs_bucket" {
 }
 
 variable "access_logs_enabled" {
-  description = "Enable ALB access logging"
+  description = "Enable ALB access logging (requires access_logs_bucket to be set)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_ip_reputation_rules" {
@@ -95,7 +95,7 @@ variable "enable_anonymous_ip_rules" {
 }
 
 variable "enable_bot_control_rules" {
-  description = "Enable AWS bot control WAF rules (count mode)"
+  description = "Enable AWS bot control WAF rules"
   type        = bool
   default     = false
 }

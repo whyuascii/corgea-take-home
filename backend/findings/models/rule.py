@@ -7,12 +7,17 @@ class Rule(models.Model):
         ACTIVE = "active"
         IGNORED = "ignored"
 
+    class Severity(models.TextChoices):
+        ERROR = "ERROR"
+        WARNING = "WARNING"
+        INFO = "INFO"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="rules"
     )
     semgrep_rule_id = models.CharField(max_length=500)
-    severity = models.CharField(max_length=20)
+    severity = models.CharField(max_length=20, choices=Severity.choices, default=Severity.WARNING)
     message = models.TextField(blank=True, default="")
     category = models.CharField(max_length=255, blank=True, default="")
     status = models.CharField(

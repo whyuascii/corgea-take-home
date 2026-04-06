@@ -16,6 +16,7 @@ if not FIELD_ENCRYPTION_KEY:
     raise ImproperlyConfigured(
         "FIELD_ENCRYPTION_KEY environment variable is required for Fernet encryption."
     )
+FIELD_ENCRYPTION_SALT = os.environ.get("FIELD_ENCRYPTION_SALT", "vulntracker-field-encryption")
 ALLOWED_HOSTS = [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

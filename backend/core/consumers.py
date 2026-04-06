@@ -1,6 +1,9 @@
 import json
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+from projects.membership import ProjectMembership
 
 
 class ScanProgressConsumer(AsyncWebsocketConsumer):
@@ -13,9 +16,6 @@ class ScanProgressConsumer(AsyncWebsocketConsumer):
             return
 
         self.project_slug = self.scope["url_route"]["kwargs"]["project_slug"]
-
-        from projects.membership import ProjectMembership
-        from channels.db import database_sync_to_async
 
         has_access = await database_sync_to_async(
             ProjectMembership.objects.filter(

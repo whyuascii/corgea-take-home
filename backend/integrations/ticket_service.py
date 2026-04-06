@@ -5,6 +5,9 @@ from django.db import transaction
 from findings.models import Finding
 from findings.models.history import FindingHistory
 
+from .exceptions import IntegrationAPIError
+from .jira_client import create_jira_issue, get_jira_issue_status, transition_jira_issue_to_done
+from .linear_client import create_linear_issue, get_linear_issue_status, transition_linear_issue_to_done
 from .models import IntegrationConfig
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,7 @@ def close_tickets_for_finding(finding):
                 _close_jira_ticket(config, finding)
             elif config.provider == IntegrationConfig.Provider.LINEAR:
                 _close_linear_ticket(config, finding)
-        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError, Exception):
+        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError, IntegrationAPIError):
             logger.exception(
                 "Failed to close %s ticket for finding %s",
                 config.provider, finding.id,
@@ -36,8 +39,6 @@ def close_tickets_for_finding(finding):
 def _close_jira_ticket(config, finding):
     if not finding.jira_ticket_id:
         return
-
-    from .jira_client import transition_jira_issue_to_done
 
     transitioned = transition_jira_issue_to_done(config, finding.jira_ticket_id)
     if transitioned:
@@ -54,8 +55,6 @@ def _close_jira_ticket(config, finding):
 def _close_linear_ticket(config, finding):
     if not finding.linear_ticket_id:
         return
-
-    from .linear_client import transition_linear_issue_to_done
 
     transitioned = transition_linear_issue_to_done(config, finding.linear_ticket_id)
     if transitioned:
@@ -85,7 +84,7 @@ def create_tickets_for_finding(finding):
                 _create_jira_ticket(config, finding)
             elif config.provider == IntegrationConfig.Provider.LINEAR:
                 _create_linear_ticket(config, finding)
-        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError):
+        except (requests.RequestException, ConnectionError, ValueError, KeyError, OSError, IntegrationAPIError):
             logger.exception(
                 "Failed to create %s ticket for finding %s",
                 config.provider, finding.id,
@@ -93,8 +92,6 @@ def create_tickets_for_finding(finding):
 
 
 def _create_jira_ticket(config, finding):
-    from .jira_client import create_jira_issue, get_jira_issue_status
-
     with transaction.atomic():
         # Re-fetch with row lock to prevent duplicate ticket creation
         finding = Finding.objects.select_for_update().get(pk=finding.pk)
@@ -127,8 +124,6 @@ def _create_jira_ticket(config, finding):
 
 
 def _create_linear_ticket(config, finding):
-    from .linear_client import create_linear_issue, get_linear_issue_status
-
     with transaction.atomic():
         # Re-fetch with row lock to prevent duplicate ticket creation
         finding = Finding.objects.select_for_update().get(pk=finding.pk)

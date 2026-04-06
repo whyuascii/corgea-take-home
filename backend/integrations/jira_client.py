@@ -4,6 +4,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from core.constants import INTEGRATION_API_TIMEOUT, INTEGRATION_CREATE_TIMEOUT
+from integrations.exceptions import IntegrationAPIError
+from integrations.validators import SSRFSafeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +18,19 @@ def _base_url(config):
     return config.jira_instance_url.rstrip("/")
 
 
+def _session():
+    """Build a requests.Session with SSRF protection on every request."""
+    s = requests.Session()
+    s.mount("http://", SSRFSafeAdapter())
+    s.mount("https://", SSRFSafeAdapter())
+    return s
+
+
 def test_jira_connection(config):
     """Test Jira credentials by fetching the project."""
     try:
-        resp = requests.get(
+        session = _session()
+        resp = session.get(
             f"{_base_url(config)}/rest/api/3/project/{config.jira_project_key}",
             auth=_auth(config),
             headers={"Accept": "application/json"},
@@ -40,7 +51,8 @@ def get_jira_issue_status(config, issue_key):
     or None if the API call fails.
     """
     try:
-        resp = requests.get(
+        session = _session()
+        resp = session.get(
             f"{_base_url(config)}/rest/api/3/issue/{issue_key}?fields=status",
             auth=_auth(config),
             headers={"Accept": "application/json"},
@@ -83,7 +95,8 @@ def transition_jira_issue_to_done(config, issue_key):
     if current_status == "done":
         return False
 
-    resp = requests.get(
+    session = _session()
+    resp = session.get(
         f"{_base_url(config)}/rest/api/3/issue/{issue_key}/transitions",
         auth=_auth(config),
         headers={"Accept": "application/json"},
@@ -106,7 +119,7 @@ def transition_jira_issue_to_done(config, issue_key):
         )
         return False
 
-    resp = requests.post(
+    resp = session.post(
         f"{_base_url(config)}/rest/api/3/issue/{issue_key}/transitions",
         auth=_auth(config),
         headers={"Accept": "application/json", "Content-Type": "application/json"},
@@ -150,7 +163,8 @@ def create_jira_issue(config, finding):
         }
     }
 
-    resp = requests.post(
+    session = _session()
+    resp = session.post(
         f"{_base_url(config)}/rest/api/3/issue",
         auth=_auth(config),
         headers={"Accept": "application/json", "Content-Type": "application/json"},
@@ -162,6 +176,6 @@ def create_jira_issue(config, finding):
     data = resp.json()
     issue_key = data.get("key")
     if not issue_key:
-        raise Exception("Jira API response missing 'key' field")
+        raise IntegrationAPIError("Jira API response missing 'key' field")
     issue_url = f"{_base_url(config)}/browse/{issue_key}"
     return issue_key, issue_url

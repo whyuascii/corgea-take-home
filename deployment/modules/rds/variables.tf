@@ -77,7 +77,7 @@ variable "db_password" {
 variable "multi_az" {
   description = "Enable Multi-AZ deployment"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "backup_retention_period" {
@@ -89,13 +89,13 @@ variable "backup_retention_period" {
 variable "deletion_protection" {
   description = "Enable deletion protection"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "skip_final_snapshot" {
   description = "Skip final snapshot on deletion"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "performance_insights_enabled" {

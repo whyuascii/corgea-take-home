@@ -1,3 +1,13 @@
+function isSafeUrl(url) {
+  if (typeof url !== 'string') return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
 function RiskBadge({ label, value }) {
   if (!value) return null
   const colorClass =
@@ -56,10 +66,14 @@ export default function SecurityDetails({ metadata }) {
       {metadata.references?.length > 0 && (
         <div className="mt-3">
           <span className="text-gray-500 text-xs block mb-1">References</span>
-          {metadata.references.map((ref) => (
-            <a key={ref} href={ref} target="_blank" rel="noopener noreferrer"
-              className="text-indigo-400 text-xs hover:underline block truncate">{ref}</a>
-          ))}
+          {metadata.references.map((ref) =>
+            isSafeUrl(ref) ? (
+              <a key={ref} href={ref} target="_blank" rel="noopener noreferrer"
+                className="text-indigo-400 text-xs hover:underline block truncate">{ref}</a>
+            ) : (
+              <span key={ref} className="text-gray-400 text-xs block truncate">{ref}</span>
+            )
+          )}
         </div>
       )}
 
@@ -84,7 +98,7 @@ export default function SecurityDetails({ metadata }) {
       )}
 
       {/* Source link */}
-      {metadata.source && (
+      {metadata.source && isSafeUrl(metadata.source) && (
         <a href={metadata.source} target="_blank" rel="noopener noreferrer"
           className="text-indigo-400 text-xs hover:underline mt-2 inline-block">
           View rule documentation &rarr;

@@ -19,10 +19,10 @@ class Scan(models.Model):
         choices=[("semgrep", "Semgrep"), ("sarif", "SARIF"), ("generic", "Generic")],
         default="semgrep",
     )
-    total_findings_count = models.IntegerField(default=0)
-    new_count = models.IntegerField(default=0)
-    resolved_count = models.IntegerField(default=0)
-    reopened_count = models.IntegerField(default=0)
+    total_findings_count = models.PositiveIntegerField(default=0)
+    new_count = models.PositiveIntegerField(default=0)
+    resolved_count = models.PositiveIntegerField(default=0)
+    reopened_count = models.PositiveIntegerField(default=0)
     commit_sha = models.CharField(max_length=40, blank=True, default="")
     branch = models.CharField(max_length=255, blank=True, default="")
     ci_provider = models.CharField(max_length=50, blank=True, default="")

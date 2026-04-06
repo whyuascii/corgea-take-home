@@ -112,6 +112,7 @@ def finding_detail(request, project_slug, finding_id):
                 id=finding_id, project=project
             )
             old_status = finding.status
+            old_severity_override = finding.severity_override
             serializer = FindingSerializer(finding, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
@@ -134,6 +135,19 @@ def finding_detail(request, project_slug, finding_id):
                     finding.id,
                     project,
                     {"old_status": old_status, "new_status": finding.status},
+                )
+
+            if "severity_override" in request.data and finding.severity_override != old_severity_override:
+                log_audit(
+                    request,
+                    AuditLog.Action.FINDING_SEVERITY_OVERRIDE,
+                    "finding",
+                    finding.id,
+                    project,
+                    {
+                        "old_severity_override": old_severity_override or None,
+                        "new_severity_override": finding.severity_override or None,
+                    },
                 )
             finding.refresh_from_db()
 

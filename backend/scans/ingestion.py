@@ -1,20 +1,26 @@
 import logging
+from datetime import timedelta
 
 import requests
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
+from django_q.tasks import async_task
 
-from core.constants import HISTORY_BATCH_SIZE, MAX_SCAN_RESULTS, SYNC_TICKET_FALLBACK_LIMIT
+from core.cache import invalidate_project_cache
+from core.constants import HISTORY_BATCH_SIZE, MAX_SCAN_RESULTS, SYNC_TICKET_FALLBACK_LIMIT, VALID_SEVERITIES
+from core.realtime import broadcast_dashboard_update, broadcast_scan_complete, broadcast_scan_progress
 from findings.models import Finding, FindingHistory, Rule, SLAPolicy
+from integrations.ticket_service import close_tickets_for_finding, create_tickets_for_finding
 from scans.parsers import parse
 
 logger = logging.getLogger(__name__)
 
 
 def get_or_create_finding(project, rule, path, start_line, end_line, defaults):
-    """Atomic get-or-create with IntegrityError retry for concurrent scans."""
+    """Atomic get-or-create with row lock on existing rows for concurrent scans."""
     try:
-        return Finding.objects.get_or_create(
+        finding, created = Finding.objects.get_or_create(
             project=project,
             rule=rule,
             file_path=path,
@@ -23,38 +29,56 @@ def get_or_create_finding(project, rule, path, start_line, end_line, defaults):
             defaults=defaults,
         )
     except IntegrityError:
-        return (
-            Finding.objects.get(
+        finding = (
+            Finding.objects.select_for_update()
+            .get(
                 project=project, rule=rule, file_path=path,
                 line_start=start_line, line_end=end_line,
-            ),
-            False,
+            )
+        )
+        return finding, False
+
+    if not created:
+        # Re-fetch with a row lock so status transitions are safe
+        finding = (
+            Finding.objects.select_for_update()
+            .get(pk=finding.pk)
         )
 
-
-def compute_sla_deadline(project, severity):
-    """Look up SLA policy for this severity and return a deadline, or None."""
-    try:
-        from datetime import timedelta
-        policy = SLAPolicy.objects.get(project=project, severity=severity)
-        return timezone.now() + timedelta(hours=policy.max_resolution_hours)
-    except (SLAPolicy.DoesNotExist, ValueError, TypeError):
-        return None
+    return finding, created
 
 
-def propagate_false_positive(finding, rule_id, project):
-    """Auto-mark a finding as FP if the same rule is FP elsewhere for this owner."""
+def _prefetch_sla_policies(project):
+    """Load all SLA policies for a project into a severity->hours map."""
+    return dict(
+        SLAPolicy.objects.filter(project=project)
+        .values_list("severity", "max_resolution_hours")
+    )
 
-    is_fp_elsewhere = Finding.objects.filter(
-        rule__semgrep_rule_id=rule_id,
-        project__owner=project.owner,
-        is_false_positive=True,
-    ).exclude(id=finding.id).exists()
 
-    if is_fp_elsewhere:
+def _prefetch_fp_rule_ids(project):
+    """Load rule IDs already marked as FP anywhere for this owner."""
+    return set(
+        Finding.objects.filter(
+            project__owner=project.owner,
+            is_false_positive=True,
+        ).values_list("rule__semgrep_rule_id", flat=True)
+    )
+
+
+def compute_sla_deadline(sla_map, severity):
+    """Return a deadline from the prefetched SLA map, or None."""
+    hours = sla_map.get(severity)
+    if hours is not None:
+        return timezone.now() + timedelta(hours=hours)
+    return None
+
+
+def propagate_false_positive(finding, rule_id, fp_rule_ids):
+    """Auto-mark a finding as FP if its rule is already FP elsewhere."""
+    if rule_id in fp_rule_ids:
         finding.is_false_positive = True
         finding.false_positive_reason = "Auto-propagated: rule marked as false positive"
-        finding.save(update_fields=["is_false_positive", "false_positive_reason"])
 
 
 def resolve_disappeared_findings(project, seen_finding_ids, scan):
@@ -93,28 +117,21 @@ def dispatch_ticket_creation(ticket_candidates):
         return
 
     try:
-        from django_q.tasks import async_task
         for finding in ticket_candidates:
             async_task("integrations.tasks.create_tickets_async", str(finding.id))
-    except (ImportError, requests.RequestException, ConnectionError, ValueError):
-        logger.exception("Failed to enqueue ticket tasks — falling back to sync (limited to 10)")
-        try:
-            from integrations.ticket_service import create_tickets_for_finding
-            for finding in ticket_candidates[:SYNC_TICKET_FALLBACK_LIMIT]:
-                try:
-                    create_tickets_for_finding(finding)
-                except (requests.RequestException, ConnectionError, ValueError):
-                    logger.exception("Failed to create tickets for finding %s", finding.id)
-        except ImportError:
-            pass
+    except (ConnectionError, OSError, ValueError):
+        logger.exception("Failed to enqueue ticket tasks — falling back to sync (limited to %d)", SYNC_TICKET_FALLBACK_LIMIT)
+        for finding in ticket_candidates[:SYNC_TICKET_FALLBACK_LIMIT]:
+            try:
+                create_tickets_for_finding(finding)
+            except (requests.RequestException, ConnectionError, ValueError):
+                logger.exception("Failed to create tickets for finding %s", finding.id)
 
 
 def dispatch_ticket_closure(resolved_finding_ids):
     """Enqueue ticket closure for resolved findings that have external tickets."""
     if not resolved_finding_ids:
         return
-
-    from django.db.models import Q
 
     ticketed_findings = Finding.objects.filter(
         id__in=resolved_finding_ids,
@@ -127,38 +144,30 @@ def dispatch_ticket_closure(resolved_finding_ids):
         return
 
     try:
-        from django_q.tasks import async_task
         for fid in ticketed_ids:
             async_task("integrations.tasks.close_tickets_async", str(fid))
-    except (ImportError, requests.RequestException, ConnectionError, ValueError):
+    except (ConnectionError, OSError, ValueError):
         logger.exception("Failed to enqueue ticket closure tasks — falling back to sync (limited to %d)", SYNC_TICKET_FALLBACK_LIMIT)
-        try:
-            from integrations.ticket_service import close_tickets_for_finding
-            for finding in ticketed_findings[:SYNC_TICKET_FALLBACK_LIMIT]:
-                try:
-                    close_tickets_for_finding(finding)
-                except (requests.RequestException, ConnectionError, ValueError):
-                    logger.exception("Failed to close tickets for finding %s", finding.id)
-        except ImportError:
-            pass
+        for finding in ticketed_findings[:SYNC_TICKET_FALLBACK_LIMIT]:
+            try:
+                close_tickets_for_finding(finding)
+            except (requests.RequestException, ConnectionError, ValueError):
+                logger.exception("Failed to close tickets for finding %s", finding.id)
 
 
 def dispatch_notifications(scan, project, summary):
     """Fire-and-forget: email, WebSocket broadcast, cache invalidation."""
     try:
-        from django_q.tasks import async_task
         async_task("scans.tasks.send_scan_notifications", str(scan.id))
-    except (ImportError, ConnectionError, ValueError):
+    except (ConnectionError, OSError, ValueError):
         logger.debug("Could not enqueue scan notification for scan %s", scan.id)
 
     try:
-        from core.realtime import broadcast_scan_complete
         broadcast_scan_complete(project.slug, scan.id, summary)
     except (OSError, ConnectionError, RuntimeError):
         logger.debug("Could not broadcast scan complete for scan %s", scan.id)
 
     try:
-        from core.realtime import broadcast_dashboard_update
         broadcast_dashboard_update(str(project.owner_id), {
             "event": "scan_complete",
             "project_slug": project.slug,
@@ -169,19 +178,19 @@ def dispatch_notifications(scan, project, summary):
         logger.debug("Could not broadcast dashboard update for project %s", project.id)
 
     try:
-        from core.cache import invalidate_project_cache
         invalidate_project_cache(project.id, project_slug=project.slug)
-    except (ImportError, ConnectionError, OSError):
+    except (ConnectionError, OSError):
         logger.debug("Could not invalidate cache for project %s", project.id)
 
-def _process_new_finding(finding, scan, nr, project, ticket_candidates, history_buffer):
-    """Set up a newly created finding: FP propagation, SLA, history."""
-    propagate_false_positive(finding, nr.check_id, project)
 
-    sla_deadline = compute_sla_deadline(project, nr.severity)
+def _process_new_finding(finding, scan, nr, project, sla_map, fp_rule_ids,
+                         ticket_candidates, history_buffer):
+    """Set up a newly created finding: FP propagation, SLA, history."""
+    propagate_false_positive(finding, nr.check_id, fp_rule_ids)
+
+    sla_deadline = compute_sla_deadline(sla_map, nr.severity)
     if sla_deadline:
         finding.sla_deadline = sla_deadline
-        finding.save(update_fields=["sla_deadline"])
 
     history_buffer.append(
         FindingHistory(
@@ -193,13 +202,16 @@ def _process_new_finding(finding, scan, nr, project, ticket_candidates, history_
 
 
 def _process_existing_finding(finding, scan, nr, ticket_candidates, history_buffer):
-    """Update an existing finding: refresh metadata, handle lifecycle transitions."""
+    """Update an existing finding: refresh metadata, handle lifecycle transitions.
+
+    The caller must have locked the row via select_for_update() so that
+    status reads and writes are serialised across concurrent scans.
+    """
     finding.last_seen_scan = scan
     finding.code_snippet = nr.snippet
     finding.metadata = nr.metadata
 
     if finding.is_false_positive:
-        finding.save(update_fields=["last_seen_scan", "code_snippet", "metadata", "updated_at"])
         return False
 
     reopened = False
@@ -223,8 +235,29 @@ def _process_existing_finding(finding, scan, nr, ticket_candidates, history_buff
             )
         )
 
-    finding.save()
     return reopened
+
+
+# Fields written by _process_new_finding / _process_existing_finding
+_NEW_FINDING_UPDATE_FIELDS = [
+    "is_false_positive", "false_positive_reason", "sla_deadline",
+]
+_EXISTING_FINDING_UPDATE_FIELDS = [
+    "last_seen_scan", "code_snippet", "metadata", "status",
+]
+
+
+def _broadcast_progress(project_slug, scan_id, processed, total):
+    """Send a WebSocket progress event (best-effort, outside transaction)."""
+    try:
+        broadcast_scan_progress(project_slug, {
+            "event": "scan_progress",
+            "scan_id": str(scan_id),
+            "processed": processed,
+            "total": total,
+        })
+    except (OSError, ConnectionError, RuntimeError):
+        pass
 
 
 def ingest_scan(scan):
@@ -236,13 +269,14 @@ def ingest_scan(scan):
     2. For each result, get-or-create Rule and Finding (dedup by
        project + rule + file_path + line_start + line_end).
     3. New findings: propagate FP status, compute SLA deadline, queue tickets.
-    4. Existing findings: RESOLVED → REOPENED, NEW → OPEN.
+    4. Existing findings: RESOLVED -> REOPENED, NEW -> OPEN.
     5. Bulk-resolve findings not present in this scan.
     6. Dispatch side effects: tickets, email, WebSocket broadcast, cache invalidation.
     """
     report = scan.raw_report
     project = scan.project
 
+    # -- Parse (outside transaction -- pure CPU, no DB writes) --
     normalized_results, detected_type = parse(report, getattr(scan, "scanner_type", None))
 
     if scan.scanner_type in (None, "", "generic"):
@@ -256,86 +290,120 @@ def ingest_scan(scan):
         )
         normalized_results = normalized_results[:MAX_SCAN_RESULTS]
 
+    # -- Prefetch lookups once (outside transaction -- read-only) --
+    sla_map = _prefetch_sla_policies(project)
+    fp_rule_ids = _prefetch_fp_rule_ids(project)
+
     new_count = 0
     reopened_count = 0
     seen_finding_ids = set()
     ticket_candidates = []
     history_buffer = []
+    new_findings_to_update = []
+    existing_findings_to_update = []
     skipped_count = 0
     total_results = len(normalized_results)
     processed_count = 0
+    progress_events = []
 
-    with transaction.atomic():
-        for nr in normalized_results:
-            if not nr.check_id or not nr.path:
-                skipped_count += 1
-                continue
+    # -- All-or-nothing transaction --
+    try:
+        with transaction.atomic():
+            for nr in normalized_results:
+                if not nr.check_id or not nr.path:
+                    skipped_count += 1
+                    continue
 
-            try:
-                rule, _ = Rule.objects.get_or_create(
-                    project=project,
-                    semgrep_rule_id=nr.check_id,
-                    defaults={"severity": nr.severity, "message": nr.message},
-                )
-            except IntegrityError:
-                rule = Rule.objects.get(project=project, semgrep_rule_id=nr.check_id)
-
-            if rule.status == Rule.Status.IGNORED:
-                continue
-
-            finding, created = get_or_create_finding(
-                project, rule, nr.path, nr.line_start, nr.line_end,
-                defaults={
-                    "code_snippet": nr.snippet,
-                    "metadata": nr.metadata,
-                    "status": Finding.Status.NEW,
-                    "first_seen_scan": scan,
-                    "last_seen_scan": scan,
-                },
-            )
-
-            if created:
-                _process_new_finding(finding, scan, nr, project, ticket_candidates, history_buffer)
-                new_count += 1
-            else:
-                reopened = _process_existing_finding(finding, scan, nr, ticket_candidates, history_buffer)
-                if reopened:
-                    reopened_count += 1
-
-            seen_finding_ids.add(finding.id)
-            processed_count += 1
-
-            if processed_count % 100 == 0 or processed_count == total_results:
+                severity = nr.severity if nr.severity in VALID_SEVERITIES else "WARNING"
                 try:
-                    from core.realtime import broadcast_scan_progress
-                    broadcast_scan_progress(project.slug, {
-                        "event": "scan_progress",
-                        "scan_id": str(scan.id),
-                        "processed": processed_count,
-                        "total": total_results,
-                    })
-                except (OSError, ConnectionError, RuntimeError):
-                    pass
+                    rule, _ = Rule.objects.get_or_create(
+                        project=project,
+                        semgrep_rule_id=nr.check_id,
+                        defaults={"severity": severity, "message": nr.message},
+                    )
+                except IntegrityError:
+                    rule = Rule.objects.select_for_update().get(
+                        project=project, semgrep_rule_id=nr.check_id,
+                    )
 
-            if len(history_buffer) >= HISTORY_BATCH_SIZE:
+                if rule.status == Rule.Status.IGNORED:
+                    continue
+
+                finding, created = get_or_create_finding(
+                    project, rule, nr.path, nr.line_start, nr.line_end,
+                    defaults={
+                        "code_snippet": nr.snippet,
+                        "metadata": nr.metadata,
+                        "status": Finding.Status.NEW,
+                        "first_seen_scan": scan,
+                        "last_seen_scan": scan,
+                    },
+                )
+
+                if created:
+                    _process_new_finding(
+                        finding, scan, nr, project, sla_map, fp_rule_ids,
+                        ticket_candidates, history_buffer,
+                    )
+                    new_findings_to_update.append(finding)
+                    new_count += 1
+                else:
+                    reopened = _process_existing_finding(
+                        finding, scan, nr, ticket_candidates, history_buffer,
+                    )
+                    existing_findings_to_update.append(finding)
+                    if reopened:
+                        reopened_count += 1
+
+                seen_finding_ids.add(finding.id)
+                processed_count += 1
+
+                if processed_count % 100 == 0 or processed_count == total_results:
+                    progress_events.append((processed_count, total_results))
+
+                if len(history_buffer) >= HISTORY_BATCH_SIZE:
+                    FindingHistory.objects.bulk_create(history_buffer)
+                    history_buffer.clear()
+
+            # Flush remaining history
+            if history_buffer:
                 FindingHistory.objects.bulk_create(history_buffer)
                 history_buffer.clear()
 
-        if history_buffer:
-            FindingHistory.objects.bulk_create(history_buffer)
-            history_buffer.clear()
+            # Bulk-update new findings (FP flag, SLA deadline)
+            if new_findings_to_update:
+                Finding.objects.bulk_update(
+                    new_findings_to_update, _NEW_FINDING_UPDATE_FIELDS,
+                    batch_size=HISTORY_BATCH_SIZE,
+                )
 
-        resolved_ids = resolve_disappeared_findings(project, seen_finding_ids, scan)
-        resolved_count = len(resolved_ids)
+            # Bulk-update existing findings (status, metadata, last_seen_scan)
+            if existing_findings_to_update:
+                Finding.objects.bulk_update(
+                    existing_findings_to_update, _EXISTING_FINDING_UPDATE_FIELDS,
+                    batch_size=HISTORY_BATCH_SIZE,
+                )
 
-        scan.total_findings_count = len(normalized_results)
-        scan.new_count = new_count
-        scan.resolved_count = resolved_count
-        scan.reopened_count = reopened_count
-        scan.save(update_fields=[
-            "total_findings_count", "new_count", "resolved_count", "reopened_count",
-            "scanner_type",
-        ])
+            resolved_ids = resolve_disappeared_findings(project, seen_finding_ids, scan)
+            resolved_count = len(resolved_ids)
+
+            scan.total_findings_count = len(normalized_results)
+            scan.new_count = new_count
+            scan.resolved_count = resolved_count
+            scan.reopened_count = reopened_count
+            scan.save(update_fields=[
+                "total_findings_count", "new_count", "resolved_count", "reopened_count",
+                "scanner_type",
+            ])
+    except Exception:
+        logger.exception("Scan %s ingestion failed — transaction rolled back", scan.id)
+        raise
+
+    # -- Side effects: only after successful commit --
+
+    # Deliver progress events that were queued during the transaction
+    for processed, total in progress_events:
+        _broadcast_progress(project.slug, scan.id, processed, total)
 
     summary = {
         "total": len(normalized_results),

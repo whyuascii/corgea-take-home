@@ -11,11 +11,15 @@ if FIELD_ENCRYPTION_KEY in ("dev-encryption-key-do-not-use-in-production", ""): 
     raise ImproperlyConfigured(
         "FIELD_ENCRYPTION_KEY must be set to a strong, unique value in production."
     )
+if FIELD_ENCRYPTION_SALT == "vulntracker-field-encryption":  # noqa: F405
+    raise ImproperlyConfigured(
+        "FIELD_ENCRYPTION_SALT must be overridden in production (set the FIELD_ENCRYPTION_SALT environment variable)."
+    )
 
 ALLOWED_HOSTS = [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be set in production (set the ALLOWED_HOSTS environment variable)")
-CORS_ALLOWED_ORIGINS = [o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o]
+CORS_ALLOWED_ORIGINS = [o for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o]
 CORS_ALLOW_ALL_ORIGINS = False
 
 SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True").lower() == "true"

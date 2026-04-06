@@ -18,6 +18,7 @@ class AuditLog(models.Model):
         SCAN_UPLOAD = "scan_upload"
         SCAN_PUSH = "scan_push"
         FINDING_STATUS_CHANGE = "finding_status_change"
+        FINDING_SEVERITY_OVERRIDE = "finding_severity_override"
         FINDING_FALSE_POSITIVE = "finding_false_positive"
         RULE_STATUS_CHANGE = "rule_status_change"
         COMMENT_CREATED = "comment_created"

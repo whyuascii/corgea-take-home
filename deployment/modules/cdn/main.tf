@@ -100,6 +100,30 @@ resource "aws_s3_bucket_public_access_block" "cdn_logs" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "cdn_logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.cdn_logs[0].id
+
+  rule {
+    id     = "expire-old-cdn-logs"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -255,11 +279,12 @@ resource "aws_cloudfront_distribution" "frontend" {
     response_page_path = "/index.html"
   }
 
+  # Note: 500 errors from the API origin (/api/*) are passed through directly
+  # because the ordered_cache_behavior for /api/* has TTL=0 and the origin
+  # returns proper JSON error responses. This only affects the S3 SPA origin.
   custom_error_response {
     error_code            = 500
-    response_code         = 500
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
+    error_caching_min_ttl = 0
   }
 
   viewer_certificate {

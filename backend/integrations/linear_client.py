@@ -3,8 +3,18 @@ import logging
 import requests
 
 from core.constants import INTEGRATION_API_TIMEOUT, INTEGRATION_CREATE_TIMEOUT, LINEAR_API_URL
+from integrations.exceptions import IntegrationAPIError
+from integrations.validators import SSRFSafeAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def _session():
+    """Build a requests.Session with SSRF protection on every request."""
+    s = requests.Session()
+    s.mount("http://", SSRFSafeAdapter())
+    s.mount("https://", SSRFSafeAdapter())
+    return s
 
 
 def _headers(config):
@@ -29,7 +39,7 @@ def test_linear_connection(config):
     }
     """
     try:
-        resp = requests.post(
+        resp = _session().post(
             LINEAR_API_URL,
             headers=_headers(config),
             json={"query": query, "variables": {"teamId": config.linear_team_id}},
@@ -63,7 +73,7 @@ def get_linear_issue_status(config, issue_id):
     }
     """
     try:
-        resp = requests.post(
+        resp = _session().post(
             LINEAR_API_URL,
             headers=_headers(config),
             json={"query": query, "variables": {"issueId": issue_id}},
@@ -113,7 +123,7 @@ def transition_linear_issue_to_done(config, issue_id):
         }
     }
     """
-    resp = requests.post(
+    resp = _session().post(
         LINEAR_API_URL,
         headers=_headers(config),
         json={"query": states_query, "variables": {"teamId": config.linear_team_id}},
@@ -123,7 +133,7 @@ def transition_linear_issue_to_done(config, issue_id):
     data = resp.json()
 
     if data.get("errors"):
-        raise Exception(data["errors"][0].get("message", "Linear API error"))
+        raise IntegrationAPIError(data["errors"][0].get("message", "Linear API error"))
 
     states = (
         data.get("data", {}).get("team", {}).get("states", {}).get("nodes", [])
@@ -146,7 +156,7 @@ def transition_linear_issue_to_done(config, issue_id):
         }
     }
     """
-    resp = requests.post(
+    resp = _session().post(
         LINEAR_API_URL,
         headers=_headers(config),
         json={
@@ -162,7 +172,7 @@ def transition_linear_issue_to_done(config, issue_id):
     result = resp.json()
 
     if result.get("errors"):
-        raise Exception(result["errors"][0].get("message", "Linear API error"))
+        raise IntegrationAPIError(result["errors"][0].get("message", "Linear API error"))
 
     success = result.get("data", {}).get("issueUpdate", {}).get("success", False)
     if success:
@@ -204,7 +214,7 @@ def create_linear_issue(config, finding):
         "description": description,
     }
 
-    resp = requests.post(
+    resp = _session().post(
         LINEAR_API_URL,
         headers=_headers(config),
         json={"query": mutation, "variables": variables},
@@ -215,18 +225,18 @@ def create_linear_issue(config, finding):
 
     if data.get("errors"):
         error_msg = data.get("errors", [{}])[0].get("message", "Linear API error")
-        raise Exception(error_msg)
+        raise IntegrationAPIError(error_msg)
 
     issue_create = data.get("data", {}).get("issueCreate", {})
     issue = issue_create.get("issue")
     if not issue:
-        raise Exception(
+        raise IntegrationAPIError(
             "Linear API response missing issue data in issueCreate"
         )
     issue_id = issue.get("id")
     issue_url = issue.get("url")
     if not issue_id or not issue_url:
-        raise Exception(
+        raise IntegrationAPIError(
             "Linear API response missing 'id' or 'url' in issue data"
         )
     return issue_id, issue_url

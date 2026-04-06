@@ -17,11 +17,12 @@ export default function ScansList() {
   const [page, setPage] = useState(1)
   const [scanProgress, setScanProgress] = useState(null)
   const fileRef = useRef()
+  const fetchScansRef = useRef()
 
   const handleWsMessage = useCallback((msg) => {
     if (msg.event === 'scan_complete') {
       setScanProgress(null)
-      fetchScans()
+      fetchScansRef.current?.()
     } else if (msg.event === 'scan_progress') {
       setScanProgress(msg)
     }
@@ -47,6 +48,7 @@ export default function ScansList() {
       setLoading(false)
     }
   }
+  fetchScansRef.current = fetchScans
 
   const handleUpload = async (e) => {
     const file = e.target.files[0]
@@ -59,10 +61,15 @@ export default function ScansList() {
       const { data } = await api.post(`/projects/${slug}/scans/upload/`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      const summary = data.summary || {}
-      let message = `Scan uploaded: ${summary.new || 0} new, ${summary.reopened || 0} reopened, ${summary.resolved || 0} resolved`
-      if (summary.skipped) {
-        message += ` (${summary.skipped} malformed results skipped)`
+      let message
+      if (data.status === 'processing') {
+        message = 'Scan uploaded — processing in background...'
+      } else {
+        const summary = data.summary || {}
+        message = `Scan uploaded: ${summary.new || 0} new, ${summary.reopened || 0} reopened, ${summary.resolved || 0} resolved`
+        if (summary.skipped) {
+          message += ` (${summary.skipped} malformed results skipped)`
+        }
       }
       setUploadResult({ type: 'success', message })
       setTimeout(() => setUploadResult(null), 6000)

@@ -254,6 +254,7 @@ export default function ProjectsList() {
   const [projects, setProjects] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
@@ -269,6 +270,8 @@ export default function ProjectsList() {
       const parsed = extractResults(data)
       setProjects(parsed.results)
       setTotalCount(parsed.count)
+    } catch {
+      setError('Failed to load projects')
     } finally {
       setLoading(false)
     }
@@ -277,12 +280,15 @@ export default function ProjectsList() {
   const handleCreate = async (e) => {
     e.preventDefault()
     setCreating(true)
+    setError(null)
     try {
       await api.post('/projects/', { name, repository_url: repoUrl })
       setName('')
       setRepoUrl('')
       setShowCreate(false)
       fetchProjects()
+    } catch {
+      setError('Failed to create project')
     } finally {
       setCreating(false)
     }
@@ -386,6 +392,12 @@ export default function ProjectsList() {
           </div>
         </form>
       </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Loading state: skeleton cards */}
       {loading && (

@@ -15,22 +15,39 @@ def _truncate_snippet(snippet):
     return snippet if isinstance(snippet, str) else ""
 
 
+_MAX_META_LIST_ITEMS = 100
+
+
+def _safe_list(value, max_items=_MAX_META_LIST_ITEMS):
+    """Return a bounded list from untrusted input."""
+    if not isinstance(value, list):
+        return []
+    return value[:max_items]
+
+
+def _safe_str(value, max_len=1000):
+    """Return a bounded string from untrusted input."""
+    if not isinstance(value, str):
+        return ""
+    return value[:max_len]
+
+
 def _sanitise_metadata(metadata_raw, fix_suggestion):
     if not isinstance(metadata_raw, dict):
         metadata_raw = {}
     return {
-        "owasp": metadata_raw.get("owasp", []),
-        "cwe": metadata_raw.get("cwe", []),
-        "references": metadata_raw.get("references", []),
-        "category": metadata_raw.get("category", ""),
-        "technology": metadata_raw.get("technology", []),
-        "subcategory": metadata_raw.get("subcategory", []),
-        "likelihood": metadata_raw.get("likelihood", ""),
-        "impact": metadata_raw.get("impact", ""),
-        "confidence": metadata_raw.get("confidence", ""),
-        "vulnerability_class": metadata_raw.get("vulnerability_class", []),
-        "source": metadata_raw.get("source", ""),
-        "shortlink": metadata_raw.get("shortlink", ""),
+        "owasp": _safe_list(metadata_raw.get("owasp", [])),
+        "cwe": _safe_list(metadata_raw.get("cwe", [])),
+        "references": _safe_list(metadata_raw.get("references", [])),
+        "category": _safe_str(metadata_raw.get("category", "")),
+        "technology": _safe_list(metadata_raw.get("technology", [])),
+        "subcategory": _safe_list(metadata_raw.get("subcategory", [])),
+        "likelihood": _safe_str(metadata_raw.get("likelihood", "")),
+        "impact": _safe_str(metadata_raw.get("impact", "")),
+        "confidence": _safe_str(metadata_raw.get("confidence", "")),
+        "vulnerability_class": _safe_list(metadata_raw.get("vulnerability_class", [])),
+        "source": _safe_str(metadata_raw.get("source", "")),
+        "shortlink": _safe_str(metadata_raw.get("shortlink", "")),
         "fix": fix_suggestion if isinstance(fix_suggestion, str) else "",
     }
 

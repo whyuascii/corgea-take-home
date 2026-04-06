@@ -1,20 +1,24 @@
 import base64
+import logging
 
-from cryptography.fernet import Fernet, MultiFernet
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from django.conf import settings
 from django.db import models
+
+logger = logging.getLogger(__name__)
 
 _fernet_cache = None
 
 
 def _derive_fernet_key(raw_key):
     """Derive a 32-byte Fernet key from a raw secret using HKDF-SHA256."""
+    salt = getattr(settings, "FIELD_ENCRYPTION_SALT", "vulntracker-field-encryption")
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=b"vulntracker-field-encryption",
+        salt=salt.encode() if isinstance(salt, str) else salt,
         info=b"fernet-key",
     )
     derived = hkdf.derive(raw_key.encode())
@@ -57,7 +61,11 @@ class EncryptedTextField(models.TextField):
         """Decrypt the value when reading from the database."""
         if not value:
             return value
-        return _get_fernet().decrypt(value.encode()).decode()
+        try:
+            return _get_fernet().decrypt(value.encode()).decode()
+        except (InvalidToken, ValueError, UnicodeDecodeError):
+            logger.error("Failed to decrypt field value — check FIELD_ENCRYPTION_KEY")
+            return ""
 
     def deconstruct(self):
         name, path, args, kwargs = super().deconstruct()

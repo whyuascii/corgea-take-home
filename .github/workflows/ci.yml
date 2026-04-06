@@ -79,6 +79,7 @@ jobs:
       DB_HOST: localhost
       DB_PORT: "5432"
       DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+      FIELD_ENCRYPTION_KEY: ci-test-encryption-key-not-for-production
     steps:
       - uses: actions/checkout@v4
 
@@ -153,11 +154,13 @@ jobs:
 
       - name: Run Django security checks
         working-directory: backend
+        continue-on-error: true
         env:
           DJANGO_SETTINGS_MODULE: config.settings.local
           DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+          FIELD_ENCRYPTION_KEY: ci-test-encryption-key
           DB_HOST: localhost
-        run: uv run python manage.py check --deploy --fail-level WARNING 2>&1 || true
+        run: uv run python manage.py check --deploy --fail-level WARNING
 
       - name: Upload security reports
         if: always()

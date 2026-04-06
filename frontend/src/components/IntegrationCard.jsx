@@ -36,6 +36,7 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
   const [testResult, setTestResult] = useState(null)
   const [mappings, setMappings] = useState([])
   const [newMapping, setNewMapping] = useState({ external_status: '', internal_status: 'resolved' })
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (config) {
@@ -60,6 +61,7 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
   const handleSave = async () => {
     setSaving(true)
     setTestResult(null)
+    setError(null)
     try {
       const payload = { provider, ...form }
       // Don't send empty token fields on update
@@ -72,8 +74,8 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
         await api.post(`/projects/${projectSlug}/integrations/`, payload)
       }
       onRefresh()
-    } catch (err) {
-      alert('Save failed: ' + (err.response?.data?.detail || err.message))
+    } catch {
+      setError('Failed to save integration. Please check your settings and try again.')
     } finally {
       setSaving(false)
     }
@@ -99,8 +101,8 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
       await api.post(`/projects/${projectSlug}/integrations/${config.id}/mappings/`, newMapping)
       setNewMapping({ external_status: '', internal_status: 'resolved' })
       onRefresh()
-    } catch (err) {
-      alert('Failed to add mapping: ' + (err.response?.data?.detail || err.message))
+    } catch {
+      setError('Failed to add mapping. Please try again.')
     }
   }
 
@@ -109,8 +111,8 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
     try {
       await api.delete(`/projects/${projectSlug}/integrations/${config.id}/mappings/${mappingId}/`)
       onRefresh()
-    } catch (err) {
-      alert('Failed to delete mapping')
+    } catch {
+      setError('Failed to delete mapping. Please try again.')
     }
   }
 
@@ -167,6 +169,10 @@ export default function IntegrationCard({ provider, config, projectSlug, onRefre
           </button>
         )}
       </div>
+
+      {error && (
+        <p className="mt-3 text-red-400 text-sm">{error}</p>
+      )}
 
       {testResult && (
         <div className={`mt-3 p-3 rounded text-sm ${testResult.ok ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>

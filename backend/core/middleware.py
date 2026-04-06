@@ -1,6 +1,8 @@
 import re
 import uuid
 
+from django.http import HttpResponse, JsonResponse
+
 
 _VALID_REQUEST_ID = re.compile(r"^[a-zA-Z0-9\-]{1,64}$")
 
@@ -38,7 +40,6 @@ class BotProtectionMiddleware:
     def __call__(self, request):
         ua = request.META.get("HTTP_USER_AGENT", "")
         if _BOT_PATTERNS.search(ua):
-            from django.http import HttpResponse
             return HttpResponse("Forbidden", status=403, content_type="text/plain")
         return self.get_response(request)
 
@@ -61,7 +62,6 @@ class ContentTypeValidationMiddleware:
                 request.content_type.startswith(t) for t in self.ALLOWED_TYPES
             )
         ):
-            from django.http import JsonResponse
             return JsonResponse(
                 {"error": "Unsupported Content-Type. Use application/json or multipart/form-data."},
                 status=415,

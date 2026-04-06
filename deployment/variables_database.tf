@@ -1,7 +1,7 @@
 # --- RDS ---
 
 variable "db_instance_class" {
-  description = "RDS instance class"
+  description = "RDS instance class (default is for dev; use db.r6g.large+ for production)"
   type        = string
   default     = "db.t3.micro"
 }
@@ -35,7 +35,7 @@ variable "db_password" {
 variable "db_multi_az" {
   description = "Enable Multi-AZ for RDS"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "secondary_db_instance_class" {
@@ -53,15 +53,15 @@ variable "rds_replica_kms_key_arn" {
 # --- Redis ---
 
 variable "redis_node_type" {
-  description = "ElastiCache node type"
+  description = "ElastiCache node type (default is for dev; use cache.r6g.large+ for production)"
   type        = string
   default     = "cache.t3.micro"
 }
 
 variable "redis_num_cache_nodes" {
-  description = "Number of Redis cache nodes"
+  description = "Number of Redis cache nodes (>= 2 required for automatic failover)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "redis_snapshot_retention_limit" {
@@ -74,6 +74,13 @@ variable "redis_snapshot_window" {
   description = "Daily snapshot time window (UTC)"
   type        = string
   default     = "05:00-06:00"
+}
+
+variable "redis_auth_token" {
+  description = "Auth token for Redis (requires transit_encryption_enabled). 16-128 chars, only printable ASCII excluding /, \", and @"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "enable_global_datastore" {

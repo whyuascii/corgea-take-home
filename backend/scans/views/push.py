@@ -4,6 +4,7 @@ import logging
 from django.core.cache import cache
 from django.db import DatabaseError
 from django.utils import timezone
+from django_q.tasks import async_task
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -14,20 +15,14 @@ from core.constants import (
     VALID_SCANNER_TYPES,
 )
 from core.audit import log_audit
+from drf_spectacular.utils import extend_schema
 from findings.models import AuditLog
 from projects.models import Project
-from ..models import Scan
-from ..serializers import ScanPushSerializer, ScanSerializer
-from drf_spectacular.utils import extend_schema
+from scans.ingestion import ingest_scan
+from scans.models import Scan
+from scans.serializers import ScanPushSerializer, ScanSerializer
 
 logger = logging.getLogger(__name__)
-
-try:
-    from django_q.tasks import async_task
-
-    _HAS_DJANGO_Q = True
-except ImportError:
-    _HAS_DJANGO_Q = False
 
 
 def _check_content_length(request):
@@ -81,8 +76,11 @@ def _authenticate_api_key(request, project_slug):
 def _check_rate_limit(project):
     """Return an error Response if the project has exceeded push rate limits, else None."""
     rate_key = f"scan_push_{project.id}"
-    cache.add(rate_key, 0, timeout=SCAN_PUSH_RATE_WINDOW)
-    push_count = cache.incr(rate_key)
+    try:
+        push_count = cache.incr(rate_key)
+    except ValueError:
+        cache.set(rate_key, 1, timeout=SCAN_PUSH_RATE_WINDOW)
+        push_count = 1
 
     if push_count > SCAN_PUSH_RATE_LIMIT:
         return Response(
@@ -97,17 +95,14 @@ def _ingest_scan(scan):
 
     Returns (response_data, response_code).
     """
-    if _HAS_DJANGO_Q:
-        try:
-            async_task("scans.tasks.ingest_scan_async", str(scan.id))
-            return (
-                {"scan": ScanSerializer(scan).data, "status": "processing"},
-                status.HTTP_202_ACCEPTED,
-            )
-        except (DatabaseError, ConnectionError, OSError):
-            logger.debug("Failed to enqueue async ingestion for scan %s", scan.id)
-
-    from ..ingestion import ingest_scan
+    try:
+        async_task("scans.tasks.ingest_scan_async", str(scan.id))
+        return (
+            {"scan": ScanSerializer(scan).data, "status": "processing"},
+            status.HTTP_202_ACCEPTED,
+        )
+    except (DatabaseError, ConnectionError, OSError):
+        logger.warning("Failed to enqueue async ingestion for scan %s — running synchronously", scan.id)
 
     summary = ingest_scan(scan)
     scan.refresh_from_db()

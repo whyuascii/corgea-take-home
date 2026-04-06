@@ -27,6 +27,15 @@ class SLAPolicy(models.Model):
 
     class Meta:
         unique_together = [("project", "severity")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(notification_threshold_hours__isnull=True)
+                    | models.Q(notification_threshold_hours__lt=models.F("max_resolution_hours"))
+                ),
+                name="sla_notification_lt_deadline",
+            ),
+        ]
         ordering = ["severity"]
 
     def __str__(self):

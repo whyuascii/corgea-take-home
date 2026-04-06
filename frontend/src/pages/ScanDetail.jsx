@@ -13,19 +13,29 @@ export default function ScanDetail() {
   const [findings, setFindings] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    api.get(`/projects/${slug}/scans/${scanId}/`).then((r) => setScan(r.data))
+    const controller = new AbortController()
+    api.get(`/projects/${slug}/scans/${scanId}/`, { signal: controller.signal })
+      .then((r) => setScan(r.data))
+      .catch((err) => { if (!controller.signal.aborted) setError('Failed to load scan details.') })
+    return () => controller.abort()
   }, [slug, scanId])
 
   useEffect(() => {
-    api.get(`/projects/${slug}/findings/?scan=${scanId}&page=${page}`).then((r) => {
-      const parsed = extractResults(r.data)
-      setFindings(parsed.results)
-      setTotalCount(parsed.count)
-    })
+    const controller = new AbortController()
+    api.get(`/projects/${slug}/findings/?scan=${scanId}&page=${page}`, { signal: controller.signal })
+      .then((r) => {
+        const parsed = extractResults(r.data)
+        setFindings(parsed.results)
+        setTotalCount(parsed.count)
+      })
+      .catch((err) => { if (!controller.signal.aborted) setError('Failed to load findings.') })
+    return () => controller.abort()
   }, [slug, scanId, page])
 
+  if (error) return <p className="text-red-400">{error}</p>
   if (!scan) return <p className="text-gray-500">Loading...</p>
 
   return (

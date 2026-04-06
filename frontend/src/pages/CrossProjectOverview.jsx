@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import api from '../api/client'
 import { extractResults, getTotalPages } from '../api/helpers'
 import Pagination from '../components/Pagination'
@@ -29,17 +29,18 @@ export default function CrossProjectOverview() {
   const [ruleFindings, setRuleFindings] = useState({})
   const [loadingFindings, setLoadingFindings] = useState(new Set())
   const [loadingRules, setLoadingRules] = useState(true)
+  const fetchRulesRef = useRef()
 
   const fetchSummary = useCallback(() => {
-    api.get('/overview/summary/').then(r => setSummary(r.data))
+    api.get('/overview/summary/').then(r => setSummary(r.data)).catch(() => {})
   }, [])
 
   const handleWsMessage = useCallback((msg) => {
     if (msg.event === 'scan_complete') {
       fetchSummary()
-      fetchRules()
+      fetchRulesRef.current?.()
     }
-  }, [])
+  }, [fetchSummary])
 
   useWebSocket('/ws/dashboard/', {
     onMessage: handleWsMessage,
@@ -74,6 +75,7 @@ export default function CrossProjectOverview() {
       setLoadingRules(false)
     }
   }
+  fetchRulesRef.current = fetchRules
 
   // Sort rules: project count descending, then finding count descending
   const sortedRules = useMemo(() => {

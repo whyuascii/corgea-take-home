@@ -26,16 +26,11 @@ echo "Running deploy checks..."
 python manage.py check --deploy 2>&1 || true
 
 if [ "${DJANGO_ENV:-development}" = "production" ]; then
-    echo "Starting gunicorn..."
-    exec gunicorn config.wsgi:application \
-        --bind 0.0.0.0:8000 \
-        --workers "${GUNICORN_WORKERS:-4}" \
-        --max-requests 1000 \
-        --max-requests-jitter 50 \
-        --timeout 120 \
-        --graceful-timeout 30 \
-        --access-logfile - \
-        --error-logfile -
+    echo "Starting daphne (ASGI)..."
+    exec daphne config.asgi:application \
+        --bind 0.0.0.0 \
+        --port 8000 \
+        --verbosity 1
 else
     echo "Starting dev server..."
     exec python manage.py runserver 0.0.0.0:8000

@@ -43,9 +43,9 @@ variable "node_type" {
 }
 
 variable "num_cache_nodes" {
-  description = "Number of cache nodes"
+  description = "Number of cache nodes (>= 2 required for automatic failover)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "engine_version" {
@@ -76,4 +76,17 @@ variable "maintenance_window" {
   description = "Weekly maintenance window"
   type        = string
   default     = "sun:06:00-sun:07:00"
+}
+
+variable "auth_token" {
+  description = "Auth token for Redis (requires transit_encryption_enabled). 16-128 chars, only printable ASCII excluding /, \", and @"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "automatic_failover_enabled" {
+  description = "Enable automatic failover (requires num_cache_nodes >= 2)"
+  type        = bool
+  default     = true
 }

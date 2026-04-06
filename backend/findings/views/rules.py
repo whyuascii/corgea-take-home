@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -18,7 +19,13 @@ from drf_spectacular.utils import extend_schema
 def rule_list(request, project_slug):
     """List all rules for a project, with optional filtering by status (active/ignored)."""
     project = get_project_for_user(request, project_slug, min_role=ProjectMembership.Role.VIEWER)
-    rules = Rule.objects.filter(project=project)
+    rules = Rule.objects.filter(project=project).annotate(
+        active_finding_count=Count(
+            "findings",
+            filter=~Q(findings__status=Finding.Status.IGNORED) & Q(findings__is_false_positive=False),
+        ),
+        total_finding_count=Count("findings"),
+    )
     rule_status = request.query_params.get("status")
     if rule_status:
         if rule_status not in [Rule.Status.ACTIVE, Rule.Status.IGNORED]:
@@ -61,7 +68,8 @@ def rule_update(request, project_slug, rule_id):
 
         if new_status == Rule.Status.IGNORED:
             findings = list(
-                Finding.objects.filter(rule=rule)
+                Finding.objects.select_for_update()
+                .filter(rule=rule)
                 .exclude(status=Finding.Status.IGNORED)
                 .only("id", "status", "updated_at")
             )
@@ -85,7 +93,8 @@ def rule_update(request, project_slug, rule_id):
         elif new_status == Rule.Status.ACTIVE and old_status == Rule.Status.IGNORED:
             latest_scan = Scan.objects.filter(project=project).first()
             findings = list(
-                Finding.objects.filter(rule=rule, status=Finding.Status.IGNORED)
+                Finding.objects.select_for_update()
+                .filter(rule=rule, status=Finding.Status.IGNORED)
                 .only("id", "status", "last_seen_scan_id", "updated_at")
             )
             history_records = []

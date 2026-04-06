@@ -50,6 +50,8 @@ resource "aws_elasticache_replication_group" "main" {
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
+  auth_token                 = var.auth_token != "" ? var.auth_token : null
+  automatic_failover_enabled = var.num_cache_nodes >= 2 ? var.automatic_failover_enabled : false
 
   snapshot_retention_limit = var.snapshot_retention_limit
   snapshot_window          = var.snapshot_retention_limit > 0 ? var.snapshot_window : null

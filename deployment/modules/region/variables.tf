@@ -127,7 +127,7 @@ variable "db_password" {
 variable "db_multi_az" {
   description = "Enable Multi-AZ for RDS"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "rds_source_arn" {
@@ -151,9 +151,9 @@ variable "redis_node_type" {
 }
 
 variable "redis_num_cache_nodes" {
-  description = "Number of Redis cache nodes"
+  description = "Number of Redis cache nodes (>= 2 required for automatic failover)"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "redis_snapshot_retention_limit" {
@@ -178,6 +178,13 @@ variable "redis_global_replication_group_id" {
   description = "Global replication group ID for secondary region to join"
   type        = string
   default     = ""
+}
+
+variable "redis_auth_token" {
+  description = "Auth token for Redis (requires transit_encryption_enabled)"
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 # --- TLS / DNS ---

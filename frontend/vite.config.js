@@ -12,7 +12,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ws': {
-        target: 'wss://backend:8000',
+        target: 'ws://backend:8000',
         ws: true,
         changeOrigin: true,
       },

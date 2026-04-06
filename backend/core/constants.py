@@ -3,14 +3,20 @@ import os
 
 def _env_int(name, default):
     """Read an integer from the environment, falling back to *default*."""
-    return int(os.environ.get(name, default))
+    raw = os.environ.get(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return int(default)
 
 MAX_UPLOAD_BYTES = _env_int("MAX_UPLOAD_BYTES", 50 * 1024 * 1024)  # 50 MB
 MAX_SCAN_RESULTS = _env_int("MAX_SCAN_RESULTS", 500_000)
 JSON_MAX_NESTING_DEPTH = _env_int("JSON_MAX_NESTING_DEPTH", 64)
 HISTORY_BATCH_SIZE = _env_int("HISTORY_BATCH_SIZE", 2_000)
 
-MAX_RULE_ID_LEN = _env_int("MAX_RULE_ID_LEN", 512)
+MAX_RULE_ID_LEN = _env_int("MAX_RULE_ID_LEN", 500)
 MAX_PATH_LEN = _env_int("MAX_PATH_LEN", 1_024)
 MAX_MESSAGE_LEN = _env_int("MAX_MESSAGE_LEN", 10_000)
 MAX_SNIPPET_LEN = _env_int("MAX_SNIPPET_LEN", 20_000)

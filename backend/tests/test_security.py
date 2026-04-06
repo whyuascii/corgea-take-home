@@ -38,18 +38,16 @@ class TestEncryptedTextField:
         decrypted = field.from_db_value(raw, None, None)
         assert decrypted == project.api_key
 
-    def test_invalid_ciphertext_raises(self, project):
-        """Corrupted or plain text values should raise on decryption."""
-        from cryptography.fernet import InvalidToken
+    def test_invalid_ciphertext_returns_empty(self, project):
+        """Corrupted or plain text values should gracefully return empty string."""
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE projects_project SET api_key = %s WHERE id = %s",
                 ["not-encrypted-data", str(project.id)],
             )
-        with pytest.raises(InvalidToken):
-            project.refresh_from_db()
-            _ = project.api_key
+        project.refresh_from_db()
+        assert project.api_key == ""
 
     def test_empty_value_not_signed(self, project):
         """Empty strings should pass through without signing."""
@@ -272,7 +270,7 @@ class TestFileUploadHardening:
             {"file": f},
             format="multipart",
         )
-        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.status_code in (status.HTTP_201_CREATED, status.HTTP_202_ACCEPTED)
 
 @pytest.mark.django_db
 class TestContentTypeValidation:
@@ -373,8 +371,9 @@ class TestWebhookSecretMasking:
         webhook_url = data.get("webhook_url", "")
         # The full secret must NOT appear in the URL
         assert "abcdef1234567890" not in webhook_url
-        # But it should start with the first 4 chars
-        assert "abcd" in webhook_url
+        # No part of the actual secret should be visible — fully masked
+        assert "abcd" not in webhook_url
+        assert "********" in webhook_url
 
 @pytest.mark.django_db
 class TestRequestIDSanitization:

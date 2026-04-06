@@ -152,7 +152,7 @@ resource "aws_wafv2_web_acl" "alb" {
       priority = 7
 
       override_action {
-        count {}
+        none {}
       }
 
       statement {
@@ -243,6 +243,25 @@ resource "aws_s3_bucket_public_access_block" "waf_access_logs" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "waf_access_logs" {
+  count  = var.enable_waf_logging ? 1 : 0
+  bucket = aws_s3_bucket.waf_access_logs[0].id
+
+  rule {
+    id     = "expire-old-access-logs"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 90
+    }
+  }
 }
 
 resource "aws_s3_bucket_logging" "waf_logs" {
@@ -349,6 +368,12 @@ resource "aws_kinesis_firehose_delivery_stream" "waf_logs" {
 
   name        = "aws-waf-logs-${local.name_prefix}"
   destination = "extended_s3"
+
+  server_side_encryption {
+    enabled  = true
+    key_type = var.kms_key_arn != "" ? "CUSTOMER_MANAGED_CMK" : "AWS_OWNED_CMK"
+    key_arn  = var.kms_key_arn != "" ? var.kms_key_arn : null
+  }
 
   extended_s3_configuration {
     role_arn   = aws_iam_role.waf_firehose[0].arn

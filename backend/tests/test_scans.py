@@ -37,12 +37,14 @@ class TestScans:
             {"file": upload_file},
             format="multipart",
         )
-        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.status_code in (status.HTTP_201_CREATED, status.HTTP_202_ACCEPTED)
         data = resp.json()
         assert "scan" in data
-        assert "summary" in data
         assert data["scan"]["source"] == "upload"
-        assert data["summary"]["total"] == 2
+        if resp.status_code == status.HTTP_202_ACCEPTED:
+            assert data["status"] == "processing"
+        else:
+            assert data["summary"]["total"] == 2
 
     def test_push_scan_async(self, project, sample_semgrep_results):
         """Push scan via API key — async ingestion returns 202."""
@@ -62,14 +64,14 @@ class TestScans:
         assert data["status"] == "processing"
 
     def test_push_scan_sync_fallback(self, project, sample_semgrep_results):
-        """Push scan falls back to sync ingestion when async is unavailable."""
+        """Push scan falls back to sync ingestion when async broker is down."""
         from unittest.mock import patch
 
         from rest_framework.test import APIClient
 
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Api-Key {project.api_key}")
-        with patch("scans.views.push._HAS_DJANGO_Q", False):
+        with patch("scans.views.push.async_task", side_effect=ConnectionError("broker down")):
             resp = client.post(
                 f"/api/projects/{project.slug}/scans/push/",
                 sample_semgrep_results,

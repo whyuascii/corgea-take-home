@@ -96,6 +96,12 @@ variable "ssm_parameter_arns" {
   type        = list(string)
 }
 
+variable "log_retention_in_days" {
+  description = "CloudWatch log retention in days"
+  type        = number
+  default     = 90
+}
+
 variable "log_group_kms_key_id" {
   description = "KMS key ARN for CloudWatch log encryption"
   type        = string

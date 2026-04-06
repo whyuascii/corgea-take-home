@@ -49,10 +49,9 @@ class IntegrationConfigSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField())
     def get_webhook_url(self, obj):
-        """Return the webhook path with a masked secret for display only."""
+        """Return the webhook path with a fully masked secret for display only."""
         if obj.webhook_secret:
-            masked = obj.webhook_secret[:4] + "****"
-            return f"/api/webhooks/{obj.provider}/{masked}/"
+            return f"/api/webhooks/{obj.provider}/********/"
         return ""
 
     def validate_jira_instance_url(self, value):

@@ -2,14 +2,14 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from core.constants import MAX_COMMENT_LENGTH
+from core.constants import MAX_COMMENT_LENGTH, VALID_SEVERITIES
 
 from .models import AuditLog, Finding, FindingComment, FindingHistory, Rule, SLAPolicy
 
 
 class RuleSerializer(serializers.ModelSerializer):
-    active_finding_count = serializers.SerializerMethodField()
-    total_finding_count = serializers.SerializerMethodField()
+    active_finding_count = serializers.IntegerField(read_only=True, default=0)
+    total_finding_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Rule
@@ -19,20 +19,6 @@ class RuleSerializer(serializers.ModelSerializer):
             "total_finding_count", "created_at",
         ]
         read_only_fields = ["id", "semgrep_rule_id", "severity", "message", "created_at"]
-
-    @extend_schema_field(serializers.IntegerField())
-    def get_active_finding_count(self, obj):
-        """Count of findings that are not ignored and not marked as false positive."""
-        return obj.findings.exclude(
-            status=Finding.Status.IGNORED
-        ).exclude(
-            is_false_positive=True
-        ).count()
-
-    @extend_schema_field(serializers.IntegerField())
-    def get_total_finding_count(self, obj):
-        """Count of all findings for this rule, regardless of status."""
-        return obj.findings.count()
 
 
 class FindingHistorySerializer(serializers.ModelSerializer):
@@ -70,11 +56,22 @@ class FindingSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "rule", "file_path", "line_start", "line_end", "metadata",
+            "id", "rule", "file_path", "line_start", "line_end",
+            "code_snippet", "metadata",
             "is_false_positive", "false_positive_reason",
             "first_seen_scan", "last_seen_scan", "created_at", "updated_at",
             "sla_deadline", "sla_breached",
+            "jira_ticket_id", "jira_ticket_url",
+            "linear_ticket_id", "linear_ticket_url",
+            "pr_url",
         ]
+
+    def validate_severity_override(self, value):
+        if value and value not in VALID_SEVERITIES:
+            raise serializers.ValidationError(
+                f"Invalid severity. Must be one of: {', '.join(sorted(VALID_SEVERITIES))}"
+            )
+        return value
 
     @extend_schema_field(serializers.CharField())
     def get_effective_severity(self, obj):
@@ -119,6 +116,21 @@ class SLAPolicySerializer(serializers.ModelSerializer):
         model = SLAPolicy
         fields = ["id", "severity", "max_resolution_hours", "notification_threshold_hours", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        threshold = data.get(
+            "notification_threshold_hours",
+            getattr(self.instance, "notification_threshold_hours", None) if self.instance else None,
+        )
+        max_hours = data.get(
+            "max_resolution_hours",
+            getattr(self.instance, "max_resolution_hours", None) if self.instance else None,
+        )
+        if threshold is not None and max_hours is not None and threshold >= max_hours:
+            raise serializers.ValidationError(
+                {"notification_threshold_hours": "Must be less than max_resolution_hours."}
+            )
+        return data
 
 
 class AuditLogSerializer(serializers.ModelSerializer):

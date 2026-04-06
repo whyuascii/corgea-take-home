@@ -65,7 +65,12 @@ def cached_view(key_prefix, timeout=60, vary_on_query=None, project_kwarg="proje
 
 
 def invalidate_project_cache(project_id, project_slug=None):
-    """Invalidate all cached data for a project."""
+    """Invalidate all cached data for a project.
+
+    Both the ID-based and slug-based version keys are updated so that
+    views using either key (detail views use ID, list views use slug)
+    see the invalidation.
+    """
     new_version = str(uuid.uuid4())
 
     ver_key_id = _make_key("project_ver", str(project_id))
@@ -74,6 +79,17 @@ def invalidate_project_cache(project_id, project_slug=None):
     if project_slug:
         ver_key_slug = _make_key("project_ver", str(project_slug))
         cache.set(ver_key_slug, new_version, timeout=CACHE_TTL_VERSION)
+    else:
+        # Always try to look up the slug so invalidation is complete
+        from projects.models import Project  # noqa: avoid circular import at module level
+        try:
+            slug = Project.objects.filter(id=project_id).values_list("slug", flat=True).first()
+            if slug:
+                ver_key_slug = _make_key("project_ver", str(slug))
+                cache.set(ver_key_slug, new_version, timeout=CACHE_TTL_VERSION)
+        except Exception:
+            logger.debug("Could not look up slug for project %s during cache invalidation", project_id)
+
     logger.debug(
         "Invalidated cache for project %s (slug=%s, new version %s)",
         project_id, project_slug, new_version,

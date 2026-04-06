@@ -121,7 +121,7 @@ def _sync_status(config, ticket_field, ticket_value, external_status):
     with transaction.atomic():
         findings = (
             Finding.objects.select_for_update()
-            .filter(**{ticket_field: ticket_value})
+            .filter(project=config.project, **{ticket_field: ticket_value})
         )
         for finding in findings:
             if finding.status == mapping.internal_status:

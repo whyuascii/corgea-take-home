@@ -7,6 +7,7 @@ export default function APIKeyCard({ projectSlug }) {
   const [newKey, setNewKey] = useState(null)
   const [regenerating, setRegenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [error, setError] = useState(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -34,13 +35,14 @@ export default function APIKeyCard({ projectSlug }) {
       return
     }
     setRegenerating(true)
+    setError(null)
     try {
       const { data } = await api.post(`/projects/${projectSlug}/rotate_api_key/`)
       setNewKey(data.api_key)
       setCopied(false)
       await fetchProject()
-    } catch (err) {
-      alert('Failed to regenerate API key: ' + (err.response?.data?.detail || err.message))
+    } catch {
+      setError('Failed to regenerate API key. Please try again.')
     } finally {
       setRegenerating(false)
     }
@@ -105,6 +107,10 @@ export default function APIKeyCard({ projectSlug }) {
             className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 font-mono"
           />
         </div>
+      )}
+
+      {error && (
+        <p className="text-red-400 text-sm mt-2">{error}</p>
       )}
 
       <div className="mt-4">

@@ -4,6 +4,8 @@ from datetime import timedelta
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
 from django.contrib.auth.models import AnonymousUser
+from django.utils import timezone
+from rest_framework.authtoken.models import Token
 
 from core.authentication import AUTH_COOKIE_NAME
 from core.constants import TOKEN_LIFETIME_HOURS
@@ -36,9 +38,6 @@ class TokenAuthMiddleware(BaseMiddleware):
 
     @database_sync_to_async
     def _get_user(self, token_key):
-        from django.utils import timezone
-        from rest_framework.authtoken.models import Token
-
         try:
             token = Token.objects.select_related("user").get(key=token_key)
         except Token.DoesNotExist:

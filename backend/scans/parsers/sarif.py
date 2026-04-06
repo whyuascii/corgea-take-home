@@ -82,13 +82,19 @@ def parse_sarif(data):
             if isinstance(rule_def, dict):
                 props = rule_def.get("properties", {})
                 if isinstance(props, dict):
-                    metadata["cwe"] = props.get("cwe", [])
-                    metadata["owasp"] = props.get("owasp", [])
-                    metadata["tags"] = props.get("tags", [])
-                    metadata["category"] = props.get("category", "")
+                    cwe = props.get("cwe", [])
+                    metadata["cwe"] = cwe[:100] if isinstance(cwe, list) else []
+                    owasp = props.get("owasp", [])
+                    metadata["owasp"] = owasp[:100] if isinstance(owasp, list) else []
+                    tags = props.get("tags", [])
+                    metadata["tags"] = tags[:100] if isinstance(tags, list) else []
+                    category = props.get("category", "")
+                    metadata["category"] = category[:1000] if isinstance(category, str) else ""
                 help_obj = rule_def.get("help", {})
                 if isinstance(help_obj, dict):
-                    metadata["references"] = [help_obj.get("text", "")]
+                    help_text = help_obj.get("text", "")
+                    if isinstance(help_text, str) and help_text.strip():
+                        metadata["references"] = [help_text[:2000]]
 
             normalized.append(NormalizedResult(
                 check_id=rule_id,

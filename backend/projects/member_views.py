@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -55,10 +56,16 @@ def member_list(request, slug):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    membership, created = ProjectMembership.objects.get_or_create(
-        project=project, user=user,
-        defaults={"role": role},
-    )
+    try:
+        membership, created = ProjectMembership.objects.get_or_create(
+            project=project, user=user,
+            defaults={"role": role},
+        )
+    except IntegrityError:
+        return Response(
+            {"error": "User is already a member of this project."},
+            status=status.HTTP_409_CONFLICT,
+        )
     if not created:
         return Response(
             {"error": "User is already a member of this project."},

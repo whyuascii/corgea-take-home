@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 
+from django.db import IntegrityError
 from django.db.models import Avg, F
 from django.utils import timezone
 from rest_framework import status
@@ -125,14 +126,14 @@ def sla_policies(request, project_slug):
 
     serializer = SLAPolicySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    # Prevent duplicate policies for the same severity within a project
     severity = serializer.validated_data.get("severity")
-    if SLAPolicy.objects.filter(project=project, severity=severity).exists():
+    try:
+        serializer.save(project=project)
+    except IntegrityError:
         return Response(
             {"error": f"An SLA policy for severity '{severity}' already exists in this project."},
             status=status.HTTP_409_CONFLICT,
         )
-    serializer.save(project=project)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 

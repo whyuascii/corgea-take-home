@@ -21,8 +21,8 @@ class Finding(models.Model):
     )
     rule = models.ForeignKey(Rule, on_delete=models.CASCADE, related_name="findings")
     file_path = models.CharField(max_length=1000)
-    line_start = models.IntegerField()
-    line_end = models.IntegerField()
+    line_start = models.PositiveIntegerField(default=0)
+    line_end = models.PositiveIntegerField(default=0)
     code_snippet = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
     status = models.CharField(
@@ -49,6 +49,12 @@ class Finding(models.Model):
 
     class Meta:
         unique_together = [("project", "rule", "file_path", "line_start", "line_end")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(line_end__gte=models.F("line_start")),
+                name="finding_line_end_gte_start",
+            ),
+        ]
         indexes = [
             models.Index(fields=["project", "status"]),
             models.Index(fields=["project", "rule"]),
